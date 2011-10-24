@@ -101,15 +101,3 @@ class OrderingFilter(BaseFilter):
             return query
         else:
             return query.order_by(self.order_value)
-
-
-if __name__=='__main__':
-    q = SolrSearcher('http://solr.uaprom:8180/uaprom5-product').search('test')
-    print q._fq
-    q.results
-    
-    qf = QueryFilter(Filter('category'), Filter('facet_region'))
-    q = qf.apply(q, {'category': [1, 2]})
-    print q._fq
-    q.results
-
