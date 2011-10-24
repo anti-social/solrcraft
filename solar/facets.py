@@ -59,8 +59,10 @@ OPS_FOR_FACET = {
 
 
 class Facet(object):
-    model = None
     field = None
+    model = None
+    session = None
+    db_field = 'id'
     name = None
     title = None
     help_text = None
@@ -69,9 +71,11 @@ class Facet(object):
 
     default_params = {}
 
-    def __init__(self, query, model=None, name=None, title=None, help_text=None):
+    def __init__(self, query, model=None, session=None, db_field=None, name=None, title=None, help_text=None):
         self.query = query
         self.model = model or self.model
+        self.session = session or self.session
+        self.db_field = db_field or self.db_field
         self.name = name or self.name
         self.title = title or self.title or self.name
         self.help_text = help_text or self.help_text
@@ -88,7 +92,8 @@ class Facet(object):
         return unicode(self.title)
 
     def __deepcopy__(self, memo):
-        facet = self.__class__(self.query, model=self.model, name=self.name, title=self.title, help_text=self.help_text)
+        facet = self.__class__(self.query, model=self.model, session=self.session, db_field=self.db_field,
+                               name=self.name, title=self.title, help_text=self.help_text)
         facet._values = deepcopy(self._values, memo)
         facet._selected_values = deepcopy(self._selected_values, memo)
         for new_fv, fv in zip(facet, self):
@@ -120,9 +125,14 @@ class Facet(object):
     def has_selected(self):
         return bool(self._selected_values)
 
+    def get_id(self, id):
+        return int(id)
+    
     def get_instances(self, ids):
-        if self.model:
-            return dict([(obj.id, obj) for obj in self.model.query.filter(self.model.id.in_(ids))])
+        if ids and self.model and self.session and self.db_field:
+            query = (self.session.query(self.model)
+                     .filter(getattr(self.model, self.db_field).in_(ids)))
+            return dict([(obj.id, obj) for obj in query])
         return {}
 
     def get_fv_by_value(self, value):
@@ -132,10 +142,10 @@ class Facet(object):
         return None
 
     def _populate_instances(self):
-        ids = [fv.value for fv in self]
+        ids = [self.get_id(fv.value) for fv in self]
         instances = self.get_instances(ids)
         for fv in self:
-            fv._instance = instances.get(fv.value)
+            fv._instance = instances.get(self.get_id(fv.value))
 
 def compound_facet_factory(name, title, facets, **attrs):
     def _init(self, *args, **kwargs):

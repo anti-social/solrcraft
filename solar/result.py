@@ -57,16 +57,16 @@ class SearchResult(object):
     def _populate_instances(self):
         ids = []
         for doc in self._all_docs:
-            ids.append(doc.id)
-            ids.extend([g_doc.id for g_doc in doc.grouped_docs])
-        instances = self.searcher._get_instances(
+            ids.append(self.searcher.get_id(doc.id))
+            ids.extend([self.searcher.get_id(g_doc.id) for g_doc in doc.grouped_docs])
+        instances = self.searcher.get_instances(
             ids, self._prefetch.get('prefetch_fields', []), self._prefetch.get('undefer_groups', []),
             *self._filter_instances.get('args', []), **self._filter_instances.get('kwargs', {}))
 
         for doc in self:
-            doc._instance = instances.get(self.searcher._get_id(doc.id))
+            doc._instance = instances.get(self.searcher.get_id(doc.id))
             for g_doc in doc.grouped_docs:
-                g_doc._instance = instances.get(self.searcher._get_id(g_doc.id))
+                g_doc._instance = instances.get(self.searcher.get_id(g_doc.id))
 
     @property
     def instances(self):

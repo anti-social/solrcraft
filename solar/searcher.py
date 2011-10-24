@@ -34,12 +34,14 @@ class SolrSearcher(object):
     solr_read_urls = None
     solr_write_urls = None
     model = None
+    session = None
+    db_field = 'id'
     query_cls = SolrQuery
 
     default_params = {}
     facet_settings = {}
 
-    def __init__(self, solr_url=None, model=None, query_cls=None):
+    def __init__(self, solr_url=None, model=None, session=None, db_field=None, query_cls=None):
         self.solr_url = solr_url or self.solr_url
         self.solr_read_urls = self.solr_read_urls or []
         self.solr_write_urls = self.solr_write_urls or []
@@ -53,6 +55,8 @@ class SolrSearcher(object):
         self.solrs_write = [Solr(url) for url in self.solr_write_urls]
 
         self.model = model or self.model
+        self.session = session or self.session
+        self.db_field = db_field or self.db_field
         self.query_cls = query_cls or self.query_cls
 
     # public methods
@@ -114,17 +118,20 @@ class SolrSearcher(object):
     def _optimize_index(self, solr):
         solr.optimize()
 
-    def _get_id(self, id):
+    # methods to override
+
+    def get_id(self, id):
         return int(id)
 
-    def _get_instances(self, ids, prefetch_fields=[], undefer_groups=[], *args, **kwargs):
+    def get_instances(self, ids, prefetch_fields=[], undefer_groups=[], *args, **kwargs):
         from sqlalchemy.orm import undefer, undefer_group, eagerload, subqueryload, RelationshipProperty
 
         if not ids:
             return {}
-        ids = [self._get_id(id) for id in ids]
+        
         instances = {}
-        dbquery = self.model.query.filter(self.model.id.in_(ids))
+        dbquery = (self.session.query(self.model)
+                   .filter(getattr(self.model, self.db_field).in_(ids)))
         for field in prefetch_fields:
             fields = field.split('__')
             mapper = self.model.mapper
