@@ -51,7 +51,32 @@ See http://wiki.apache.org/solr/SimpleFacetParameters#Multi-Select_Faceting_and_
 5. Mapping
 
 Mapping docs and facets on any objects you want
-and then you can access it via .instance attribute
+and then you can access it via .instance attribute::
+
+    class MovieSearcher(SolrSearcher):
+        model = Movie
+
+        # example of non-standart mapping
+        class KeywordFacet(Facet):
+            field = 'keywords'
+            model = Keyword
+            session = session
+
+            def get_id(self, id):
+                return id
+
+            def get_instances(self, ids):
+                return dict([(obj.name, obj) for obj in session.query(self.model).filter(self.model.name.in_(ids)])
+
+        def get_instances(self, ids):
+            return dict([(obj.id, obj) for obj in session.query(self.model).filter(self.model.id.in_(ids)])
+    
+    q = Movie.searcher.search(u'monty python').facet('keywords')
+    for doc in q:
+        print doc.instance.id, doc.instance.name
+
+    for fv in q.results.get_facet('keywords'):
+        print fv.instance.name, fv.count
   
 6. Multiple Solr's
 
