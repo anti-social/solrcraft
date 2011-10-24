@@ -7,6 +7,7 @@ Features
 
 1. Searching
  searcher = SolrSearcher()
+
  q = searcher.search('test', category=1).ps(5).qf('name^5 description').bf('linear(rank,100,0)')
 
  q=test+AND+category:1&ps=5&bf=linear(rank,100,0)&qf=name^5+description
@@ -34,9 +35,13 @@ Features
  facet.mincount=1&facet.sort=true&facet.field={!ex=status}status&facet.field={!ex=category}category&facet.field={!ex=type}type&facet.missing=false&facet.offset=0&facet.method=fc&facet=true&facet.limit=-1&f.category.facet.mincount=5
 
  qf = q.get_query_filter()
+
  qf.add_ordering([(u'by rank', '-rank'), (u'by date', '-date_created')])
+
  # now you can filter your search query by get parameters
+
  # supports Django's QueryDict, webob's MultiDict or python dict
+
  q = qf.apply(q, {'status': [0,1], 'type': 3, 'type__gte': 5, sort: '-rank'})
 
  fq={!tag=rank}-rank:[*+TO+*]&fq={!tag=status}(status:0+OR+status:1)&sort=rank+desc
