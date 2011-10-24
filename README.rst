@@ -16,11 +16,11 @@ Features
 
 3. Facets
 
- .facet('category').facet(['status', 'type'])
+ .facet('status').facet(['category', 'type'], params={'category': {'mincount': 5}})
 
-There are facet.field and facet.query support
-also automatically adds tag for every fq and excludes corresponding fq from facets
-see http://wiki.apache.org/solr/SimpleFacetParameters#Multi-Select_Faceting_and_LocalParams
+There are facet.field and facet.query support.
+Also automatically adds tag for every fq and excludes corresponding fq from facets.
+See http://wiki.apache.org/solr/SimpleFacetParameters#Multi-Select_Faceting_and_LocalParams
 
 4. Mapping
 
@@ -29,14 +29,14 @@ and access via .instance attribute
   
 5. Multiple solrs
 
-Reading from and writing to multiple Solr instances
-for reading choses Solr instance randomly
-writes into every Solr instance
-but you should syncronize Solr's manually (use rsync or something else)
+Reading from and writing to multiple Solr instances.
+For reading choses Solr instance randomly.
+Writes into every Solr instance.
+But you should syncronize Solr's manually (use rsync or something else).
 
 6. Lazy evaluate
 
-Only iterating, count and access to .results attribute make http requests to Solr
+Only iterating, count and access to .results attribute make http requests to Solr.
 
 TODO
 ----
