@@ -6,39 +6,51 @@ Features
 --------
 
 1. Searching
- .search('test', category=1).ps(5).qf('name^5 description').bf('linear(rank,100,0)')
+ searcher = SolrSearcher()
+ q = searcher.search('test', category=1).ps(5).qf('name^5 description').bf('linear(rank,100,0)')
 
  q=test+AND+category:1&ps=5&bf=linear(rank,100,0)&qf=name^5+description
 
 2. Filtering
 
- .filter(status=0).filter(category__in=[1, 2, 3]).exclude(rank__lte=5)
+ q = q.filter(status=0).filter(category__in=[1, 2, 3]).exclude(rank__lte=5)
 
  fq={!tag=status}status:0&fq={!tag=category}(category:1+OR+category:2+OR+category:3)&fq={!tag=rank}-rank:[*+TO+5]
 
+ q = q.exclude(rank=None)
+
+ fq={!tag=rank}rank:[*+TO+*]
 
 3. Grouping
 
- .group('director', limit=5)
+ q = q.group('director', limit=5)
 
  group=true&group.ngroups=true&group.field=director&group.limit=5
 
 4. Facets
 
- .facet('status').facet(['category', 'type'], params={'category': {'mincount': 5}})
+ q = q.facet('status').facet(['category', 'type'], params={'category': {'mincount': 5}})
 
  facet.mincount=1&facet.sort=true&facet.field={!ex=status}status&facet.field={!ex=category}category&facet.field={!ex=type}type&facet.missing=false&facet.offset=0&facet.method=fc&facet=true&facet.limit=-1&f.category.facet.mincount=5
 
+ qf = q.get_query_filter()
+ qf.add_ordering([(u'by rank', '-rank'), (u'by date', '-date_created')])
+ # now you can filter your search query by get parameters
+ # supports Django's QueryDict, webob's MultiDict or python dict
+ q = qf.apply(q, {'status': [0,1], 'type': 3, 'type__gte': 5, sort: '-rank'})
+
+ fq={!tag=rank}-rank:[*+TO+*]&fq={!tag=status}(status:0+OR+status:1)&sort=rank+desc
+
 There are facet.field and facet.query support.
-Also automatically adds tag for every fq and excludes corresponding fq from facets.
+Also automatically adds tag for every fq and excludes corresponding fq's from facets.
 See http://wiki.apache.org/solr/SimpleFacetParameters#Multi-Select_Faceting_and_LocalParams
 
 5. Mapping
 
 Mapping docs and facets on any objects you want
-and access via .instance attribute
+and then you can access it via .instance attribute
   
-6. Multiple solrs
+6. Multiple Solr's
 
 Reading from and writing to multiple Solr instances.
 For reading choses Solr instance randomly.
