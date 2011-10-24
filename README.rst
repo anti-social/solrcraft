@@ -2,49 +2,47 @@
 Solar
 =====
 
+Library to use Solr with python.
+
 Features
 --------
 
-1. Searching
- searcher = SolrSearcher() # you can't do real requests to Solr, use next: SolrSearcher('http://localhost:8180/db')
+1. Searching::
 
- q = searcher.search('test', category=1).ps(5).qf('name^5 description').bf('linear(rank,100,0)')
+    searcher = SolrSearcher() # you can't do real requests to Solr, use next: SolrSearcher('http://localhost:8180/db')
+    q = searcher.search('test', category=1).ps(5).qf('name^5 description').bf('linear(rank,100,0)')
 
- q=test+AND+category:1&ps=5&bf=linear(rank,100,0)&qf=name^5+description
+    q=test+AND+category:1&ps=5&bf=linear(rank,100,0)&qf=name^5+description
 
-2. Filtering
+2. Filtering::
 
- q = q.filter(status=0).filter(category__in=[1, 2, 3]).exclude(rank__lte=5)
+    q = q.filter(status=0).filter(category__in=[1, 2, 3]).exclude(rank__lte=5)
 
- fq={!tag=status}status:0&fq={!tag=category}(category:1+OR+category:2+OR+category:3)&fq={!tag=rank}-rank:[*+TO+5]
+    fq={!tag=status}status:0&fq={!tag=category}(category:1+OR+category:2+OR+category:3)&fq={!tag=rank}-rank:[*+TO+5]
 
- q = q.exclude(rank=None)
+    q = q.exclude(rank=None)
 
- fq={!tag=rank}rank:[*+TO+*]
+    fq={!tag=rank}rank:[*+TO+*]
 
-3. Grouping
+3. Grouping::
 
- q = q.group('director', limit=5)
+    q = q.group('director', limit=5)
 
- group=true&group.ngroups=true&group.field=director&group.limit=5
+    group=true&group.ngroups=true&group.field=director&group.limit=5
 
-4. Facets
+4. Facets::
 
- q = q.facet('status').facet(['category', 'type'], params={'category': {'mincount': 5}})
+    q = q.facet('status').facet(['category', 'type'], params={'category': {'mincount': 5}})
 
- facet.mincount=1&facet.sort=true&facet.field={!ex=status}status&facet.field={!ex=category}category&facet.field={!ex=type}type&facet.missing=false&facet.offset=0&facet.method=fc&facet=true&facet.limit=-1&f.category.facet.mincount=5
+    facet.mincount=1&facet.sort=true&facet.field={!ex=status}status&facet.field={!ex=category}category&facet.field={!ex=type}type&facet.missing=false&facet.offset=0&facet.method=fc&facet=true&facet.limit=-1&f.category.facet.mincount=5
 
- qf = q.get_query_filter()
+    qf = q.get_query_filter()
+    qf.add_ordering([(u'by rank', '-rank'), (u'by date', '-date_created')])
+    # now you can filter your search query by get parameters
+    # supports Django's QueryDict, webob's MultiDict or python dict
+    q = qf.apply(q, {'status': [0,1], 'type': 3, 'type__gte': 5, 'sort': '-rank'})
 
- qf.add_ordering([(u'by rank', '-rank'), (u'by date', '-date_created')])
-
- # now you can filter your search query by get parameters
-
- # supports Django's QueryDict, webob's MultiDict or python dict
-
- q = qf.apply(q, {'status': [0,1], 'type': 3, 'type__gte': 5, 'sort': '-rank'})
-
- fq={!tag=rank}-rank:[*+TO+*]&fq={!tag=status}(status:0+OR+status:1)&sort=rank+desc
+    fq={!tag=rank}-rank:[*+TO+*]&fq={!tag=status}(status:0+OR+status:1)&sort=rank+desc
 
 There are facet.field and facet.query support.
 Also automatically adds tag for every fq and excludes corresponding fq's from facets.
