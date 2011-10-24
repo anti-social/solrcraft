@@ -10,7 +10,7 @@ def read(fname):
 
 setup(
     name = "solar",
-    version = "0.0.2",
+    version = "0.0.3",
     author = "Alexander Koval",
     author_email = "kovalidis@gmail.com",
     description = ("A library to use solr in python projects."),

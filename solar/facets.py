@@ -60,11 +60,11 @@ class Facet(object):
     name = None
     title = None
     help_text = None
-    
+
     select_multiple = True
 
     default_params = {}
-    
+
     def __init__(self, query, model=None, name=None, title=None, help_text=None):
         self.query = query
         self.model = model or self.model
@@ -92,7 +92,7 @@ class Facet(object):
             if hasattr(self, '_instance'):
                 new_fv._instance = self._instance
         return facet
-        
+
     def add_value(self, facet_value):
         facet_value.facet = self
         if facet_value.selected:
@@ -102,24 +102,30 @@ class Facet(object):
 
     @property
     def values(self):
-        return [v for v in self._values if v.count != 0]
+        return self._values
 
     @property
     def selected_values(self):
-        return [v for v in self._selected_values if v.count != 0]
+        return self._selected_values
 
     @property
     def all_values(self):
         return self.selected_values + self.values
-    
+
     @property
     def has_selected(self):
         return bool(self._selected_values)
-    
+
     def get_instances(self, ids):
         if self.model:
             return dict([(obj.id, obj) for obj in self.model.query.filter(self.model.id.in_(ids))])
         return {}
+
+    def get_fv_by_value(self, value):
+        for fv in self.all_values:
+            if fv.value == value:
+                return fv
+        return None
 
     def _populate_instances(self):
         ids = [fv.value for fv in self]
@@ -131,7 +137,7 @@ def compound_facet_factory(name, title, facets, **attrs):
     def _init(self, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.name = name
-        
+
     def _add_value(self, facet_value):
         def fv_cmp(fv1, fv2):
             facet_cls1 = self.paramvalue_to_facet_cls_map.get((fv1.param, fv1.value))
@@ -150,9 +156,13 @@ def compound_facet_factory(name, title, facets, **attrs):
         facet = facet_cls(self.query)
         facet.add_value(facet_value)
         facet_value._facet = self
-        self._values.append(facet_value)
-        self._values.sort(cmp=fv_cmp)
-        
+        if facet_value.selected:
+            self._selected_values.append(facet_value)
+            self._selected_values.sort(cmp=fv_cmp)
+        else:
+            self._values.append(facet_value)
+            self._values.sort(cmp=fv_cmp)
+
     attrs['facets'] = facets
     attrs['fields'] = [facet.field for facet in facets]
     attrs['queries'] = []
@@ -180,11 +190,13 @@ class FacetValue(object):
 
     @property
     def title(self):
+        if hasattr(self.facet, 'get_title') and callable(self.facet.get_title):
+            return self.facet.get_title(self)
         if self._title:
             return self._title
-        elif hasattr(self.instance, '__unicode__'):
-            return self.instance
-        elif hasattr(self.instance, 'name'):
+        if hasattr(self.instance, '__unicode__'):
+            return unicode(self.instance)
+        if hasattr(self.instance, 'name'):
             return self.instance.name
         return self.value
 

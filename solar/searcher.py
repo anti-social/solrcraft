@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import random
 
-from pysolr2 import Solr
+from pysolr import Solr
 
 from query import SolrQuery
 from util import SafeString, SafeUnicode, safe_solr_query, X, make_fq
@@ -24,7 +24,7 @@ class SolrSearcherMeta(type):
                         cls.facet_settings[_facet_cls.field] = facet_cls
                 else:
                     cls.facet_settings[facet_cls.field] = facet_cls
-        
+
         return cls
 
 class SolrSearcher(object):
@@ -48,15 +48,15 @@ class SolrSearcher(object):
             self.solr_write_urls.append(self.solr_url)
         self.solr_read_urls = list(set(self.solr_read_urls))
         self.solr_write_urls = list(set(self.solr_write_urls))
-        
+
         self.solrs_read = [Solr(url) for url in self.solr_read_urls]
         self.solrs_write = [Solr(url) for url in self.solr_write_urls]
-        
+
         self.model = model or self.model
         self.query_cls = query_cls or self.query_cls
 
     # public methods
-    
+
     def search(self, q=None, *args, **kwargs):
         clean_dismax = False
         if q is None or args or kwargs:
@@ -76,7 +76,7 @@ class SolrSearcher(object):
     def select(self, q, **kwargs):
         solr = random.choice(self.solrs_read)
         return solr.search(q, **kwargs)
-    
+
     def add(self, docs, commit=True):
         for solr in self.solrs_write:
             self._add(solr, docs, commit=commit)
@@ -84,17 +84,17 @@ class SolrSearcher(object):
     def commit(self):
         for solr in self.solrs_write:
             self._commit(solr)
-    
+
     def delete(self, id=None, *args, **kwargs):
         for solr in self.solrs_write:
             self._delete(solr, id=id, *args, **kwargs)
-    
+
     def optimize_index(self):
         for solr in self.solrs_write:
             self._optimize_index(solr)
 
     # private methods
-    
+
     def _add(self, solr, docs, commit=True):
         cleaned_docs = []
         for doc in docs:
@@ -114,11 +114,15 @@ class SolrSearcher(object):
     def _optimize_index(self, solr):
         solr.optimize()
 
+    def _get_id(self, id):
+        return int(id)
+
     def _get_instances(self, ids, prefetch_fields=[], undefer_groups=[], *args, **kwargs):
         from sqlalchemy.orm import undefer, undefer_group, eagerload, subqueryload, RelationshipProperty
-        
+
         if not ids:
             return {}
+        ids = [self._get_id(id) for id in ids]
         instances = {}
         dbquery = self.model.query.filter(self.model.id.in_(ids))
         for field in prefetch_fields:
@@ -147,4 +151,25 @@ class SolrSearcher(object):
             dbquery = dbquery.filter_by(**kwargs)
         for instance in dbquery:
             instances[instance.id] = instance
+
         return instances
+
+
+if __name__ == '__main__':
+    q = SolrSearcher('http://solr:8180/uaprom2-product').search('test').dismax().qf('name^5 short_description') \
+        .filter(status=0, company_status=0).filter(facet_region=194009, category=161601).facet(['facet_region', 'category'], mincount=3).collapse('company')
+    res = q.results
+    print '** Count:', len(res)
+    print '** Total count:', res.total_hits
+    print '** Facets:'
+    for facet in res.facets:
+        print unicode(facet)
+        for val in facet:
+            print val.with_count()
+    print '** Documents:'
+    for doc in q:
+        print doc.id, doc.name, getattr(doc, 'company', None), doc.score
+
+    q = q.facet(None).collapse(None)
+    count = q.count()
+    print 'Count:', count

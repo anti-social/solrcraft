@@ -28,7 +28,7 @@ class SolrQuery(object):
     def __init__(self, searcher, q):
         self.searcher = searcher
         self.model = searcher.model
-        
+
         self._q = q
         self._fq = X()
         self._params = {}
@@ -64,7 +64,7 @@ class SolrQuery(object):
     def __getitem__(self, k):
         if not isinstance(k, (slice, int, long)):
             raise TypeError
-        
+
         if self._result_cache is not None:
             return self._result_cache.docs[k]
         else:
@@ -105,9 +105,12 @@ class SolrQuery(object):
             params['fq'] = make_fq(self._fq)
         if 'fl' not in params:
             params['fl'] = ('*', 'score')
+        # elif params.get('group') and 'group.field' in params \
+        #         and params['group.field'] not in params['fl']:
+        #     params['fl'] = params['fl'] + (params['group.field'],)
         # elif 'score' not in params['fl']:
         #     params['fl'] = params['fl'] + ('score',)
-        
+
         # TODO: exclude filters for facet queries too
         if 'facet.field' in params:
             for i, facet_field in enumerate(params['facet.field']):
@@ -120,25 +123,42 @@ class SolrQuery(object):
             if p not in params:
                 params[p] = v
         return params
-    
+
     def _do_search(self, only_count=False):
         params = self._modify_params(deepcopy(self._params))
         # if 'fq' in params:
         #     print 'fq:', params['fq']
         # print params
-        _results = self.searcher.select(safe_solr_query(self._q), **prepare_params(params))
-        
-        results = SearchResult(self.searcher, _results.hits, self._prefetch, self._filter_instances)
-        for _doc in _results.docs:
-            results.add_doc(Document(_doc))
-        results.add_facets(self._process_facets(_results.facets))
-        results.add_collapse_counts(_results.collapse_counts)
-        if hasattr(_results, 'total_hits'):
-            results.total_hits = _results.total_hits
-        
+        raw_results = self.searcher.select(safe_solr_query(self._q), **prepare_params(params))
+
+        results = SearchResult(self.searcher, raw_results.hits, self._prefetch, self._filter_instances)
+        if raw_results.grouped:
+            results.add_grouped_docs(raw_results.grouped)
+        else:
+            results.add_docs(raw_results.docs)
+        results.add_facets(self._process_facets(raw_results.facets))
+        results.total_hits = getattr(raw_results, 'total_hits', raw_results.hits)
+
         return results
 
-    def _process_facets(self, _facets):
+    def _process_facets(self, facets):
+        def grouped_list(l, group_by=2):
+            res = []
+            for i in range(len(l)):
+                if i % group_by == 0:
+                    res.append((l[i], l[i+1]))
+            return res
+
+        # example
+        # {'facet_fields': {'categories': ['13', 92746, '28', 73406, '15', 55351, '1307', 43146]}}
+
+        _facets = {'facet_fields': [], 'facet_queries': [], 'facet_dates': []}
+        if facets:
+            for f_key, f_value in facets['facet_fields'].items():
+                _facets['facet_fields'].append([f_key, grouped_list(f_value)])
+            for f_key, f_value in facets['facet_queries'].items():
+                _facets['facet_queries'].append((f_key, f_value))
+
         # print _facets['facet_queries']
         facets = []
         facet_class_map = {}
@@ -157,7 +177,7 @@ class SolrQuery(object):
                     selected = True
                 facet.add_value(FacetValue(facet_name, fv_name, fv_count, selected))
             facets.append(facet)
-        
+
         # facet queries
         for facet_query, facet_count in _facets['facet_queries']:
             facet_name, facet_cond = facet_query.split(':')
@@ -207,7 +227,11 @@ class SolrQuery(object):
 
     @property
     def results(self):
-        return self._fetch_results()
+        try:
+            return self._fetch_results()
+        except AttributeError, e:
+            # catch AttributeError cause else __getattr__ will be called
+            raise RuntimeError(e.args[0])
 
     def search(self, q):
         clone = self._clone()
@@ -225,7 +249,7 @@ class SolrQuery(object):
         clone._filter_instances['args'].extend(args)
         clone._filter_instances['kwargs'].update(kwargs)
         return clone
-    
+
     def instances(self, *args, **kwargs):
         return self._clone(InstancesSolrQuery).only('id').filter_instances(*args, **kwargs)
 
@@ -238,7 +262,7 @@ class SolrQuery(object):
         clone = self._clone()
         clone._fq = clone._fq & ~X(*args, **kwargs)
         return clone
-    
+
     def prefetch(self, *prefetch_fields, **kwargs):
         """This method was left for compatibility with Djapian.
         Now instances are fetched when first access to instance attribute of document or facet.
@@ -286,7 +310,7 @@ class SolrQuery(object):
         clone = self._clone()
         clone._params[param_name] = value
         return clone
-    
+
     def facet(self, fields, limit=-1, offset=0, mincount=1, sort=True, missing=False, method='fc', params=None):
         def add_field_or_query(clone, field_name):
             facet_cls = clone.searcher.facet_settings.get(field_name)
@@ -323,7 +347,7 @@ class SolrQuery(object):
                 #     if len(field_data) >= 3:
                 #         settings['model'] = field_data[2]
                 #     self._facet_settings[field_data[0]] = settings
-            
+
             clone._params['facet'] = True
             clone._params['facet.limit'] = limit
             clone._params['facet.offset'] = offset
@@ -336,16 +360,24 @@ class SolrQuery(object):
         return clone
     facets = facet
 
-    def collapse(self, field, threshold=1, maxdocs=None):
+    def group(self, field, limit=1, offset=None, sort=None, main=None, format=None, truncate=None):
         clone = self._clone()
         if field:
-            clone._params['collapse'] = True
-            clone._params['collapse.field'] = field
-            clone._params['collapse.threshold'] = self.searcher.default_params.get('collapse.threshold', threshold)
-            clone._params['collapse.maxdocs'] = self.searcher.default_params.get('collapse.maxdocs', maxdocs)
+            default_params = self.searcher.default_params
+            clone._params['group'] = True
+            clone._params['group.ngroups'] = True
+            clone._params['group.field'] = field
+            clone._params['group.limit'] = limit or default_params.get('group.limit')
+            clone._params['group.offset'] = offset or default_params.get('group.offset')
+            clone._params['group.sort'] = format or default_params.get('group.sort')
+            clone._params['group.main'] = main or default_params.get('group.main')
+            clone._params['group.main'] = format or default_params.get('group.format')
+            clone._params['group.truncate'] = truncate or default_params.get('group.truncate')
         else:
-            clone._clean_params('collapse')
+            clone._clean_params('group')
         return clone
+
+    collapse = group
 
     def get_query_filter(self, filters=None, exclude_facets=None):
         filters = filters or []
