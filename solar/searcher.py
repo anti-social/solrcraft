@@ -153,23 +153,3 @@ class SolrSearcher(object):
             instances[instance.id] = instance
 
         return instances
-
-
-if __name__ == '__main__':
-    q = SolrSearcher('http://solr:8180/uaprom2-product').search('test').dismax().qf('name^5 short_description') \
-        .filter(status=0, company_status=0).filter(facet_region=194009, category=161601).facet(['facet_region', 'category'], mincount=3).collapse('company')
-    res = q.results
-    print '** Count:', len(res)
-    print '** Total count:', res.total_hits
-    print '** Facets:'
-    for facet in res.facets:
-        print unicode(facet)
-        for val in facet:
-            print val.with_count()
-    print '** Documents:'
-    for doc in q:
-        print doc.id, doc.name, getattr(doc, 'company', None), doc.score
-
-    q = q.facet(None).collapse(None)
-    count = q.count()
-    print 'Count:', count
