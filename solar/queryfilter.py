@@ -35,38 +35,55 @@ class BaseFilter(object):
     def __init__(self, name):
         self.name = name
 
+    def _filter_and_split_params(self, params):
+        """Returns [(operator1, value1), (operator2, value2)]"""
+        
+        items = []
+        for p, v in params:
+            ops = p.split('__')
+            name = ops[0]
+            if len(ops) == 1:
+                op = 'exact'
+            else:
+                op = '__'.join(ops[1:])
+            if name == self.name:
+                op = OPERATORS.get(op)
+                if op:
+                    items.append((op, v))
+        return items
+        
     def _parse_params(self, params):
         if hasattr(params, 'getall'):
             # Webob
-            items = []
-            for p, v in params.items():
-                ops = p.split('__')
-                name = ops[0]
-                ops = ops[1:]
-                if name == self.name:
-                    items.append((ops, v))
-            return items
+            new_params = params.items()
         elif hasattr(params, 'getlist'):
             # Django
-            return params.getlist(self.name)
-        elif self.name in params:
+            new_params = []
+            for k, v in params.lists():
+                for _v in v:
+                    new_params.append((k, _v))
+        elif isinstance(params, dict):
             # dict
-            value = params[self.name]
-            if isinstance(value, (list, tuple)):
-                return value
-            return [value]
-        return []
+            new_params = []
+            for k, v in params.items():
+                if isinstance(v, (list, tuple)):
+                    for _v in v:
+                        new_params.append((k, _v))
+                else:
+                    new_params.append((k, v))
+        else:
+            # list of tuples
+            new_params = params
+
+        return self._filter_and_split_params(new_params)
 
 class Filter(BaseFilter):
     def apply(self, query, params):
-        # print self.name
         x = []
-        for ops, v in self._parse_params(params):
-            op = OPERATORS.get(ops[0]) if ops else OPERATORS['exact']
-            if op:
-                _x = op(self.name, v)
-                if _x:
-                    x.append(_x)
+        for op, v in self._parse_params(params):
+            _x = op(self.name, v)
+            if _x:
+                x.append(_x)
         if x:
             return query.filter(*x, _op='OR')
         return query
