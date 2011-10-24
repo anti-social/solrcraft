@@ -55,6 +55,7 @@ TODO
 * Dynamic fields support (need mapping for facets)
 * Groups refactoring
 * Lazy results and facets
+* facet.date and facet.range support
 * Django support
 * Documentation
 * Unit tests
