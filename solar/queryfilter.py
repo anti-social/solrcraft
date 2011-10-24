@@ -25,7 +25,7 @@ class QueryFilter(object):
         self.filters.append(filter)
         self.filter_names.append(filter.name)
 
-    def add_ordering(self, order_param='sort', ordering_settings=None):
+    def add_ordering(self, ordering_settings=None, order_param='sort'):
         ordering_filter = OrderingFilter(order_param, ordering_settings)
         if self.ordering_filter is None:
             self.ordering_filter = ordering_filter
