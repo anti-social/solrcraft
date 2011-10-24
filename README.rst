@@ -43,7 +43,7 @@ and access via .instance attribute
 Reading from and writing to multiple Solr instances.
 For reading choses Solr instance randomly.
 Writes into every Solr instance.
-But you should syncronize Solr's manually (use rsync or something else).
+You should syncronize reading Solr's with writing instances manually (use rsync or something else).
 
 7. Lazy evaluate
 
