@@ -35,7 +35,9 @@ def isnull_op(f, v):
 OPERATORS = {
     'exact': lambda f, v: X(**{f: parse_param(v)}),
     'gte': lambda f, v: X(**{f: '[%s TO *]' % parse_param(v)}),
+    'gt': lambda f, v: X(**{f: '{%s TO *}' % parse_param(v)}),
     'lte': lambda f, v: X(**{f: '[* TO %s]' % parse_param(v)}),
+    'lt': lambda f, v: X(**{f: '{* TO %s}' % parse_param(v)}),
     'isnull': isnull_op,
     }
 
@@ -49,7 +51,9 @@ def isnull_op4facet(f, v):
 OPS_FOR_FACET = {
     'exact': lambda f, v: '%s:%s' % (f, parse_param(v)),
     'gte': lambda f, v: '%s:[%s TO *]' % (f, parse_param(v)),
+    'gt': lambda f, v: '%s:{%s TO *}' % (f, parse_param(v)),
     'lte': lambda f, v: '%s:[* TO %s]' % (f, parse_param(v)),
+    'lt': lambda f, v: '%s:{* TO %s}' % (f, parse_param(v)),
     'isnull': isnull_op4facet,
     }
 
