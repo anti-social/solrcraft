@@ -6,7 +6,7 @@ Features
 --------
 
 1. Searching
- searcher = SolrSearcher()
+ searcher = SolrSearcher() # you can't do real requests to Solr, use next: SolrSearcher('http://localhost:8180/db')
 
  q = searcher.search('test', category=1).ps(5).qf('name^5 description').bf('linear(rank,100,0)')
 
@@ -42,7 +42,7 @@ Features
 
  # supports Django's QueryDict, webob's MultiDict or python dict
 
- q = qf.apply(q, {'status': [0,1], 'type': 3, 'type__gte': 5, sort: '-rank'})
+ q = qf.apply(q, {'status': [0,1], 'type': 3, 'type__gte': 5, 'sort': '-rank'})
 
  fq={!tag=rank}-rank:[*+TO+*]&fq={!tag=status}(status:0+OR+status:1)&sort=rank+desc
 
