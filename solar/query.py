@@ -1,6 +1,8 @@
-
-from copy import deepcopy
+import re
+from copy import copy, deepcopy
 import urllib
+
+from pysolr import SolrError
 
 from result import SearchResult, Document
 from facets import Facet, FacetValue, OPERATORS, OPS_FOR_FACET
@@ -32,9 +34,10 @@ class SolrQuery(object):
         self._q = q
         self._fq = X()
         self._params = {}
-        self._filter_instances = {'args': [], 'kwargs': {}}
 
-        self._prefetch = {}
+        self._db_query = None
+        self._db_query_filters = []
+        
         self._result_cache = None
         # self._facet_settings = {}
 
@@ -111,13 +114,23 @@ class SolrQuery(object):
         # elif 'score' not in params['fl']:
         #     params['fl'] = params['fl'] + ('score',)
 
-        # TODO: exclude filters for facet queries too
         if 'facet.field' in params:
             for i, facet_field in enumerate(params['facet.field']):
-                if hasattr(self.searcher, 'multi_valued_fields') and facet_field in self.searcher.multi_valued_fields:
+                if hasattr(self.searcher, 'multi_valued_fields') \
+                        and facet_field in self.searcher.multi_valued_fields:
                     params['facet.field'][i] = facet_field
                 else:
                     params['facet.field'][i] = '{!ex=%s}%s' % (facet_field, facet_field)
+        
+        if 'facet.query' in params:
+            for i, facet_query in enumerate(params['facet.query']):
+                facet_field = facet_query.split(':')[0].strip()
+                if hasattr(self.searcher, 'multi_valued_fields') \
+                        and facet_field in self.searcher.multi_valued_fields:
+                    params['facet.query'][i] = facet_query
+                else:
+                    params['facet.query'][i] = '{!ex=%s}%s' % (facet_field, facet_query)
+        
         # set default params from searcher
         for p, v in self.searcher.default_params.items():
             if p not in params:
@@ -125,13 +138,14 @@ class SolrQuery(object):
         return params
 
     def _do_search(self, only_count=False):
-        params = self._modify_params(deepcopy(self._params))
+        params = self._modify_params(deepcopy(self._params), only_count=only_count)
         # if 'fq' in params:
         #     print 'fq:', params['fq']
         # print params
         raw_results = self.searcher.select(safe_solr_query(self._q), **prepare_params(params))
 
-        results = SearchResult(self.searcher, raw_results.hits, self._prefetch, self._filter_instances)
+        results = SearchResult(self.searcher, raw_results.hits,
+                               self._db_query, self._db_query_filters)
         if raw_results.grouped:
             results.add_grouped_docs(raw_results.grouped)
         else:
@@ -180,6 +194,7 @@ class SolrQuery(object):
 
         # facet queries
         for facet_query, facet_count in _facets['facet_queries']:
+            facet_query = re.split('{!.*}', facet_query)[-1]
             facet_name, facet_cond = facet_query.split(':')
             facet_cls = self.searcher.facet_settings.get(facet_name, Facet)
             if facet_cls not in facet_class_map:
@@ -211,8 +226,8 @@ class SolrQuery(object):
         clone = cls(self.searcher, self._q)
         clone._fq = deepcopy(self._fq)
         clone._params = deepcopy(self._params)
-        clone._prefetch = deepcopy(self._prefetch)
-        clone._filter_instances = deepcopy(self._filter_instances)
+        clone._db_query = self._db_query
+        clone._db_query_filters = copy(self._db_query_filters)
         return clone
 
     def _clean_params(self, param):
@@ -244,14 +259,8 @@ class SolrQuery(object):
     def count(self):
         return len(self._clone()._fetch_results(only_count=True))
 
-    def filter_instances(self, *args, **kwargs):
-        clone = self._clone()
-        clone._filter_instances['args'].extend(args)
-        clone._filter_instances['kwargs'].update(kwargs)
-        return clone
-
-    def instances(self, *args, **kwargs):
-        return self._clone(InstancesSolrQuery).only('id').filter_instances(*args, **kwargs)
+    def instances(self):
+        return self._clone(InstancesSolrQuery).only('id')
 
     def filter(self, *args, **kwargs):
         clone = self._clone()
@@ -263,14 +272,15 @@ class SolrQuery(object):
         clone._fq = clone._fq & ~X(*args, **kwargs)
         return clone
 
-    def prefetch(self, *prefetch_fields, **kwargs):
-        """This method was left for compatibility with Djapian.
-        Now instances are fetched when first access to instance attribute of document or facet.
-        """
+    def with_db_query(self, db_query):
         clone = self._clone()
-        clone._prefetch['prefetch_fields'] = prefetch_fields
-        if 'undefer_groups' in kwargs:
-            clone._prefetch['undefer_groups'] = kwargs['undefer_groups']
+        clone._db_query = db_query
+        return clone
+
+    def filter_db_query(self, *args, **kwargs):
+        clone = self._clone()
+        clone._db_query_filters += args
+        clone._db_query_filters += kwargs.items()
         return clone
 
     def only(self, *fields):
@@ -396,6 +406,11 @@ class SolrQuery(object):
                     qf.add_filter(field)
         return qf
 
+    def get(self, *args, **kwargs):
+        clone = self.filter(*args, **kwargs).limit(1)
+        if len(clone):
+            return clone[0]
+
 class InstancesSolrQuery(SolrQuery):
     def __iter__(self):
         results = self._fetch_results()
@@ -405,5 +420,7 @@ class InstancesSolrQuery(SolrQuery):
         res = super(InstancesSolrQuery, self).__getitem__(k)
         if isinstance(res, SolrQuery):
             return res
-        else:
+        elif isinstance(res, list):
             return [doc.instance for doc in res if doc.instance]
+        return res.instance
+

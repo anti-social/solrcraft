@@ -81,6 +81,7 @@ class Facet(object):
         self.help_text = help_text or self.help_text
         self._values = []
         self._selected_values = []
+        self._values_map = {}
 
     def __iter__(self):
         return iter(self.selected_values + self.values)
@@ -108,6 +109,7 @@ class Facet(object):
             self._selected_values.append(facet_value)
         else:
             self._values.append(facet_value)
+        self._values_map[self.get_id(facet_value.value)] = facet_value
 
     @property
     def values(self):
@@ -127,7 +129,7 @@ class Facet(object):
 
     def get_id(self, id):
         return int(id)
-    
+
     def get_instances(self, ids):
         if ids and self.model and self.session and self.db_field:
             query = (self.session.query(self.model)
@@ -135,11 +137,8 @@ class Facet(object):
             return dict([(obj.id, obj) for obj in query])
         return {}
 
-    def get_fv_by_value(self, value):
-        for fv in self.all_values:
-            if fv.value == value:
-                return fv
-        return None
+    def get_fv_by_value(self, value, default=None):
+        return self._values_map.get(value, default)
 
     def _populate_instances(self):
         ids = [self.get_id(fv.value) for fv in self]

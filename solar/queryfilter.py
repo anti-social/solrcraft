@@ -13,8 +13,10 @@ class QueryFilter(object):
         for filter in self.filters:
             if exclude is None or filter.name not in exclude:
                 query = filter.apply(query, params)
+
         if self.ordering_filter:
             query = self.ordering_filter.apply(query, params)
+
         return query
 
     def add_filter(self, filter):
@@ -29,7 +31,6 @@ class QueryFilter(object):
         ordering_filter = OrderingFilter(order_param, ordering_settings)
         if self.ordering_filter is None:
             self.ordering_filter = ordering_filter
-        
 
 class BaseFilter(object):
     def __init__(self, name):
@@ -37,7 +38,6 @@ class BaseFilter(object):
 
     def _filter_and_split_params(self, params):
         """Returns [(operator1, value1), (operator2, value2)]"""
-        
         items = []
         for p, v in params:
             ops = p.split('__')
@@ -51,7 +51,7 @@ class BaseFilter(object):
                 if op:
                     items.append((op, v))
         return items
-        
+
     def _parse_params(self, params):
         if hasattr(params, 'getall'):
             # Webob
@@ -94,23 +94,33 @@ class OrderingFilter(BaseFilter):
         self.ordering_settings = []
         self.order_value = default_order
         if ordering_settings:
-            for i, (title, values) in enumerate(ordering_settings):
+            for i, (title, values, help_text) in enumerate(ordering_settings):
                 if isinstance(values, basestring):
-                    self.ordering_settings.append({'title': title, 'values': ((values,), None), 'aliases': (values, None)})
+                    self.ordering_settings.append({'title': title,
+                                                   'values': ((values,), None),
+                                                   'aliases': (values, None),
+                                                   'help_text': help_text})
                     if i == 0:
                         self.order_value = self.order_value or values
                 else:
                     if len(values) == 1:
-                        self.ordering_settings.append({'title': title, 'values': (values[0], None), 'aliases': (values[0][0], None)})
+                        self.ordering_settings.append({'title': title,
+                                                       'values': (values[0], None),
+                                                       'aliases': (values[0][0], None),
+                                                       'help_text': help_text})
                         if i == 0:
                             self.order_value = self.order_value or values[0][0]
                     elif len(values) == 2:
-                        self.ordering_settings.append({'title': title, 'values': (values[0], values[1]), 'aliases': (values[0][0], values[1][0])})
+                        self.ordering_settings.append({'title': title,
+                                                       'values': (values[0], values[1]),
+                                                       'aliases': (values[0][0], values[1][0]),
+                                                       'help_text': help_text})
                         if i == 0:
-                            self.order_value = self.order_value or ordering_values[0][0]
+                            self.order_value = self.order_value or values[0][0]
 
     def apply(self, query, params):
         self.order_value = params.get(self.name, self.order_value)
+
         if self.ordering_settings:
             for order_setting in self.ordering_settings:
                 if self.order_value in order_setting['aliases']:

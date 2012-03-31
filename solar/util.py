@@ -1,9 +1,11 @@
 
-from datetime import datetime
 import re
 import urllib
+import logging
+from datetime import datetime, date
 
 from tree import Node
+
 
 class SafeString(str):
     pass
@@ -59,7 +61,7 @@ class X(Node):
         return obj
 
 def process_value(v):
-    if isinstance(v, datetime):
+    if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
     if v is True:
         return '1'
@@ -72,6 +74,10 @@ def process_field(field, op, value):
         return '%s:[%s TO *]' % (field, value)
     elif op == 'lte':
         return '%s:[* TO %s]' % (field, value)
+    elif op == 'gt':
+        return '%s:{%s TO *}' % (field, value)
+    elif op == 'lt':
+        return '%s:{* TO %s}' % (field, value)
     elif op == 'between':
         v0 = '*' if value[0] is None else value[0]
         v1 = '*' if value[1] is None else value[1]

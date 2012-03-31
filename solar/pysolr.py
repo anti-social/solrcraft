@@ -308,10 +308,11 @@ class Solr(object):
 
             try:
                 start_time = time.time()
-                self.log.debug("Starting request to '%s' (%s) with body '%s'..." % (url, method, str(body)[:10]))
+                log_url = '%s&indent=on' % url
+                self.log.debug("Starting request to '%s' (%s) with body '%s'..." % (log_url, method, str(body)[:10]))
                 headers, response = http.request(url, method=method, body=body, headers=headers)
                 end_time = time.time()
-                self.log.info("Finished '%s' (%s) with body '%s' in %0.3f seconds." % (url, method, str(body)[:10], end_time - start_time))
+                self.log.info("Finished '%s' (%s) with body '%s' in %0.3f seconds." % (log_url, method, str(body)[:10], end_time - start_time))
             except AttributeError:
                 # For httplib2.
                 error_message = "Failed to connect to server at '%s'. Are you sure '%s' is correct? Checking it in a browser might help..." % (url, self.base_url)

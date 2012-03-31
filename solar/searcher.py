@@ -75,6 +75,9 @@ class SolrSearcher(object):
             return self.query_cls(self, q).dismax(None)
         return self.query_cls(self, q)
 
+    def get(self, *args, **kwargs):
+        return self.search().get(*args, **kwargs)
+
     # proxy methods
 
     def select(self, q, **kwargs):
@@ -111,7 +114,7 @@ class SolrSearcher(object):
     def _delete(self, solr, id=None, *args, **kwargs):
         commit = kwargs.pop('commit', True)
         q = None
-        if id is None:
+        if args or kwargs:
             q = make_fq(X(*args, **kwargs), add_tags=False, as_string=True)
         solr.delete(id, q, commit=commit)
 
@@ -123,40 +126,75 @@ class SolrSearcher(object):
     def get_id(self, id):
         return int(id)
 
-    def get_instances(self, ids, prefetch_fields=[], undefer_groups=[], *args, **kwargs):
-        from sqlalchemy.orm import undefer, undefer_group, eagerload, subqueryload, RelationshipProperty
+    def get_db_query(self):
+        return self.session.query(self.model)
 
+    def get_filter_by_method(self, db_query):
+        if hasattr(db_query, 'filter_by'):
+            # SQLAlchemy query
+            return db_query.filter_by
+        # Django query
+        return db_query.filter
+
+    def get_instances(self, ids, db_query=None, db_query_filters=[]):
         if not ids:
             return {}
-        
+
+        if not db_query:
+            db_query = self.get_db_query()
+
+        for query_filter in db_query_filters:
+            if callable(query_filter):
+                db_query = query_filter(db_query)
+            elif isinstance(query_filter, tuple):
+                db_query = self.get_filter_by_method(db_query)(
+                    **{query_filter[0]: query_filter[1]})
+            else:
+                db_query = db_query.filter(query_filter)
+
         instances = {}
-        dbquery = (self.session.query(self.model)
-                   .filter(getattr(self.model, self.db_field).in_(ids)))
-        for field in prefetch_fields:
-            fields = field.split('__')
-            mapper = self.model.mapper
-            field_path = []
-            for f in fields:
-                field_path.append(f)
-                prop = mapper.get_property(f)
-                if isinstance(prop, RelationshipProperty):
-                    if prop.direction.name == 'ONETOMANY':
-                        dbquery = dbquery.options(subqueryload('.'.join(field_path)))
-                    else:
-                        dbquery = dbquery.options(eagerload('.'.join(field_path)))
-                else:
-                    dbquery = dbquery.options(undefer('.'.join(field_path)))
-                if not hasattr(prop, 'mapper'):
-                    break
-                mapper = prop.mapper
-        for group in undefer_groups:
-            dbquery = dbquery.options(undefer_group(group))
-        # apply filters
-        for a in args:
-            dbquery = dbquery.filter(a)
-        if kwargs:
-            dbquery = dbquery.filter_by(**kwargs)
-        for instance in dbquery:
-            instances[instance.id] = instance
+        db_query = db_query.filter(getattr(self.model, self.db_field).in_(ids))
+        for obj in db_query:
+            instances[obj.id] = obj
 
         return instances
+
+class CommonSearcher(SolrSearcher):
+    unique_field = '_id'
+    type_field = '_type'
+    type_value = None
+    sep = ':'
+    
+    def get_type_value(self):
+        return self.type_value or self.model.__name__
+
+    def get_unique_value(self, id):
+        return '%s%s%s' % (
+            self.get_type_value(), self.sep, id,
+        )
+    
+    def search(self, q=None, *args, **kwargs):
+        return (
+            super(CommonSearcher, self)
+            .search(q, *args, **kwargs)
+            .filter(**{self.type_field: self.get_type_value()})
+        )
+
+    def add(self, docs, commit=True):
+        patched_docs = []
+        for _doc in docs:
+            if _doc:
+                doc = _doc.copy()
+                doc[self.unique_field] = self.get_unique_value(
+                    doc[self.db_field]
+                )
+                doc[self.type_field] = self.get_type_value()
+                patched_docs.append(doc)
+                
+        return super(CommonSearcher, self).add(patched_docs, commit=commit)
+
+    def delete(self, id=None, *args, **kwargs):
+        return (
+            super(CommonSearcher, self)
+            .delete(id, **{self.type_field: self.get_type_value()})
+        )

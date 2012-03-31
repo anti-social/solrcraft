@@ -1,13 +1,13 @@
 
 class SearchResult(object):
-    def __init__(self, searcher, hits, prefetch=None, filter_instances=None):
+    def __init__(self, searcher, hits, db_query=None, db_query_filters=[]):
         self.searcher = searcher
         self.hits = hits
         self.docs = []
         self._all_docs = []
         self.facets = []
-        self._prefetch = prefetch
-        self._filter_instances = filter_instances
+        self._db_query = db_query
+        self._db_query_filters = db_query_filters
 
     def __len__(self):
         return self.hits
@@ -59,9 +59,8 @@ class SearchResult(object):
         for doc in self._all_docs:
             ids.append(self.searcher.get_id(doc.id))
             ids.extend([self.searcher.get_id(g_doc.id) for g_doc in doc.grouped_docs])
-        instances = self.searcher.get_instances(
-            ids, self._prefetch.get('prefetch_fields', []), self._prefetch.get('undefer_groups', []),
-            *self._filter_instances.get('args', []), **self._filter_instances.get('kwargs', {}))
+        instances = self.searcher.get_instances(ids, self._db_query,
+                                                self._db_query_filters)
 
         for doc in self:
             doc._instance = instances.get(self.searcher.get_id(doc.id))
