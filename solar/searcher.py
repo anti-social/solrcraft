@@ -4,6 +4,7 @@ import random
 from pysolr import Solr
 
 from query import SolrQuery
+from facets import Facet
 from util import SafeString, SafeUnicode, safe_solr_query, X, make_fq
 
 class SolrSearcherMeta(type):
@@ -14,16 +15,6 @@ class SolrSearcherMeta(type):
         if hasattr(cls, 'model') and cls.model is not None:
             attach_as = getattr(cls, 'attach_as', 'searcher')
             setattr(cls.model, attach_as, cls())
-
-        # process facets
-        if hasattr(cls, 'facets') and cls.facets is not None:
-            cls.facet_settings = {}
-            for facet_cls in cls.facets:
-                if hasattr(facet_cls, 'facets'):
-                    for _facet_cls in facet_cls.facets:
-                        cls.facet_settings[_facet_cls.field] = facet_cls
-                else:
-                    cls.facet_settings[facet_cls.field] = facet_cls
 
         return cls
 
@@ -39,7 +30,6 @@ class SolrSearcher(object):
     query_cls = SolrQuery
 
     default_params = {}
-    facet_settings = {}
 
     def __init__(self, solr_url=None, model=None, session=None, db_field=None, query_cls=None):
         self.solr_url = solr_url or self.solr_url
@@ -58,6 +48,19 @@ class SolrSearcher(object):
         self.session = session or self.session
         self.db_field = db_field or self.db_field
         self.query_cls = query_cls or self.query_cls
+
+        self._field_name_to_facet_cls_cache = {}
+
+    def _get_facet_cls(self, field_name):
+        if field_name in self._field_name_to_facet_cls_cache:
+            return self._field_name_to_facet_cls_cache[field_name]
+        
+        for facet_cls in self.facets:
+            matched_cls = facet_cls.match(field_name)
+            if matched_cls:
+                self._field_name_to_facet_cls_cache[field_name] = matched_cls
+                return facet_cls
+        return Facet
 
     # public methods
 

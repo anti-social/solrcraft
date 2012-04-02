@@ -103,6 +103,11 @@ class Facet(object):
                 new_fv._instance = self._instance
         return facet
 
+    @classmethod
+    def match(cls, field_name):
+        if re.match('^%s$' % cls.field, field_name):
+            return cls
+
     def add_value(self, facet_value):
         facet_value.facet = self
         if facet_value.selected:
@@ -147,34 +152,41 @@ class Facet(object):
             fv._instance = instances.get(self.get_id(fv.value))
 
 def compound_facet_factory(name, title, facets, **attrs):
-    def _init(self, *args, **kwargs):
-        super(self.__class__, self).__init__(*args, **kwargs)
-        self.name = name
+    class CompoundBaseFacet(Facet):
+        def __init__(self, *args, **kwargs):
+            super(CompoundBaseFacet, self).__init__(*args, **kwargs)
+            self.name = name
 
-    def _add_value(self, facet_value):
-        def fv_cmp(fv1, fv2):
-            facet_cls1 = self.paramvalue_to_facet_cls_map.get((fv1.param, fv1.value))
-            facet_cls2 = self.paramvalue_to_facet_cls_map.get((fv2.param, fv2.value))
-            try:
-                ix1 = self.facets.index(facet_cls1)
-                ix2 = self.facets.index(facet_cls2)
-                ret = cmp(ix1, ix2)
-                if ret == 0:
-                    return cmp(fv1.count, fv2.count)
-                return ret
-            except ValueError:
-                return 0
+        @classmethod
+        def match(cls, field_name):
+            for facet_cls in cls.facets:
+                if facet_cls.match(field_name):
+                    return cls
 
-        facet_cls = self.paramvalue_to_facet_cls_map.get((facet_value.param, facet_value.value))
-        facet = facet_cls(self.query)
-        facet.add_value(facet_value)
-        facet_value._facet = self
-        if facet_value.selected:
-            self._selected_values.append(facet_value)
-            self._selected_values.sort(cmp=fv_cmp)
-        else:
-            self._values.append(facet_value)
-            self._values.sort(cmp=fv_cmp)
+        def add_value(self, facet_value):
+            def fv_cmp(fv1, fv2):
+                facet_cls1 = self.paramvalue_to_facet_cls_map.get((fv1.param, fv1.value))
+                facet_cls2 = self.paramvalue_to_facet_cls_map.get((fv2.param, fv2.value))
+                try:
+                    ix1 = self.facets.index(facet_cls1)
+                    ix2 = self.facets.index(facet_cls2)
+                    ret = cmp(ix1, ix2)
+                    if ret == 0:
+                        return cmp(fv1.count, fv2.count)
+                    return ret
+                except ValueError:
+                    return 0
+
+            facet_cls = self.paramvalue_to_facet_cls_map.get((facet_value.param, facet_value.value))
+            facet = facet_cls(self.query)
+            facet.add_value(facet_value)
+            facet_value._facet = self
+            if facet_value.selected:
+                self._selected_values.append(facet_value)
+                self._selected_values.sort(cmp=fv_cmp)
+            else:
+                self._values.append(facet_value)
+                self._values.sort(cmp=fv_cmp)
 
     attrs['facets'] = facets
     attrs['fields'] = [facet.field for facet in facets]
@@ -187,9 +199,7 @@ def compound_facet_factory(name, title, facets, **attrs):
                 attrs['paramvalue_to_facet_cls_map'][(make_param(*split_param(q[0][0])), process_value(q[0][1]))] = facet
     attrs['name'] = name
     attrs['title'] = title
-    attrs['add_value'] = _add_value
-    attrs['__init__'] = _init
-    return type('CompoundFacet', (Facet,), attrs)
+    return type('CompoundFacet', (CompoundBaseFacet,), attrs)
 
 class FacetValue(object):
     def __init__(self, param, value, count, selected=False, title=None, help_text=None):

@@ -39,7 +39,6 @@ class SolrQuery(object):
         self._db_query_filters = []
         
         self._result_cache = None
-        # self._facet_settings = {}
 
     def __unicode__(self):
         params = prepare_params(self._modify_params(deepcopy(self._params)))
@@ -175,6 +174,8 @@ class SolrQuery(object):
 
         # print _facets['facet_queries']
         facets = []
+        # TODO: Remove facet_class_map variable
+        # needed to map facet queries to facet instance
         facet_class_map = {}
         filters_map = convert_fq_to_filters_map(self._fq)
         # print filters_map
@@ -182,7 +183,7 @@ class SolrQuery(object):
         # facet fields
         for _facet in _facets['facet_fields']:
             facet_name = _facet[0]
-            facet_cls = self.searcher.facet_settings.get(facet_name, Facet)
+            facet_cls = self.searcher._get_facet_cls(facet_name)
             facet = facet_cls(self, name=facet_name)
             facet_class_map[facet_cls] = facet
             for fv_name, fv_count in _facet[1]:
@@ -196,7 +197,7 @@ class SolrQuery(object):
         for facet_query, facet_count in _facets['facet_queries']:
             facet_query = re.split('{!.*}', facet_query)[-1]
             facet_name, facet_cond = facet_query.split(':')
-            facet_cls = self.searcher.facet_settings.get(facet_name, Facet)
+            facet_cls = self.searcher._get_facet_cls(facet_name)
             if facet_cls not in facet_class_map:
                 facet = facet_cls(self, name=facet_name)
                 facet_class_map[facet_cls] = facet
@@ -207,7 +208,8 @@ class SolrQuery(object):
                 selected = facet_name in filters_map and facet_cond in filters_map[facet_name]
                 fv_param = make_param(facet_name, fv_op)
                 fv_val = process_value(fv_val)
-                facet.add_value(FacetValue(fv_param, fv_val, facet_count, selected, fv_title, fv_help_text))
+                facet.add_value(FacetValue(fv_param, fv_val, facet_count,
+                                           selected, fv_title, fv_help_text))
                 facets.append(facet)
             else:
                 facet = facet_class_map[facet_cls]
@@ -215,10 +217,14 @@ class SolrQuery(object):
                     fv_field, fv_op = split_param(fv_param)
                     if OPS_FOR_FACET[fv_op](fv_field, fv_val) == facet_query:
                         break
-                selected = facet_name in filters_map and facet_cond in filters_map[facet_name]
+                selected = facet_name in filters_map \
+                    and facet_cond in filters_map[facet_name]
                 fv_param = make_param(facet_name, fv_op)
                 fv_val = process_value(fv_val)
-                facet_class_map[facet_cls].add_value(FacetValue(fv_param, fv_val, facet_count, selected, fv_title, fv_help_text))
+                facet_class_map[facet_cls].add_value(
+                    FacetValue(fv_param, fv_val, facet_count, selected,
+                               fv_title, fv_help_text)
+                )
         return facets
 
     def _clone(self, cls=None):
@@ -323,7 +329,7 @@ class SolrQuery(object):
 
     def facet(self, fields, limit=-1, offset=0, mincount=1, sort=True, missing=False, method='fc', params=None):
         def add_field_or_query(clone, field_name):
-            facet_cls = clone.searcher.facet_settings.get(field_name)
+            facet_cls = clone.searcher._get_facet_cls(field_name)
             if facet_cls and hasattr(facet_cls, 'queries'):
                 for (fv_field_op, fv_val), title, help_text in unpack_tuples(facet_cls.queries, 3):
                     fv_field, fv_op = split_param(fv_field_op)
