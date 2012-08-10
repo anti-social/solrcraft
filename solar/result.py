@@ -1,11 +1,17 @@
+from .stats import Stats
 
 class SearchResult(object):
-    def __init__(self, searcher, hits, db_query=None, db_query_filters=[]):
-        self.searcher = searcher
+    def __init__(self, query, hits, db_query=None, db_query_filters=[]):
+        self.query = query
+        self.searcher = self.query.searcher
         self.hits = hits
         self.docs = []
         self._all_docs = []
-        self.facets = []
+        self.facet_fields = []
+        self.facet_queries = []
+        self.facet_dates = []
+        self.facet_ranges = []
+        self.stats_fields = []
         self._db_query = db_query
         self._db_query_filters = db_query_filters
 
@@ -38,21 +44,29 @@ class SearchResult(object):
                 self._all_docs.extend(g_docs)
                 doc.grouped_docs = g_docs[1:]
                 doc.grouped_count = group_hits - 1
+
+    def add_stats_fields(self, stats_fields):
+        if stats_fields:
+            self.stats_fields = [Stats(field, st) for field, st in stats_fields.items()]
+
+    def get_stats_field(self, field):
+        for st in self.stats_fields:
+            if st.field == field:
+                return st
+        raise ValueError("Not found stats for field: '%s'" % field)
         
-    def add_facets(self, facets):
-        self.facets = facets
+    def add_facets(self, facet_fields, facet_queries,
+                   facet_dates, facet_ranges):
+        self.facet_fields = facet_fields
+        self.facet_queries = facet_queries
+        self.facet_dates = facet_dates
+        self.facet_ranges = facet_ranges
 
-    def get_facet(self, name):
-        for facet in self.facets:
-            if facet.name == name:
+    def get_facet_field(self, field):
+        for facet in self.facet_fields:
+            if facet.field == field:
                 return facet
-        raise ValueError("Not found facet with name: '%s'" % name)
-
-    def pop_facet(self, name):
-        for i, facet in enumerate(self.facets):
-            if facet.name == name:
-                return self.facets.pop(i)
-        raise ValueError("Not found facet with name: '%s'" % name)
+        raise ValueError("Not found facet for field: '%s'" % field)
 
     def _populate_instances(self):
         ids = []

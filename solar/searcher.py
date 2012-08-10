@@ -4,8 +4,7 @@ import random
 from pysolr import Solr
 
 from query import SolrQuery
-from facets import Facet
-from util import SafeString, SafeUnicode, safe_solr_query, X, make_fq
+from util import X, make_fq
 
 class SolrSearcherMeta(type):
     def __new__(mcs, name, bases, dct):
@@ -30,6 +29,7 @@ class SolrSearcher(object):
     query_cls = SolrQuery
 
     default_params = {}
+    facets = []
 
     def __init__(self, solr_url=None, model=None, session=None, db_field=None, query_cls=None):
         self.solr_url = solr_url or self.solr_url
@@ -65,18 +65,7 @@ class SolrSearcher(object):
     # public methods
 
     def search(self, q=None, *args, **kwargs):
-        clean_dismax = False
-        if q is None or args or kwargs:
-            clean_dismax = True
-        q = safe_solr_query(q)
-        q = make_fq(X(q, *args, **kwargs), add_tags=False, as_string=True)
-        if isinstance(q, unicode):
-            q = SafeUnicode(q)
-        else:
-            q = SafeString(q)
-        if clean_dismax:
-            return self.query_cls(self, q).dismax(None)
-        return self.query_cls(self, q)
+        return self.query_cls(self, q, *args, **kwargs)
 
     def get(self, *args, **kwargs):
         return self.search().get(*args, **kwargs)
@@ -118,7 +107,7 @@ class SolrSearcher(object):
         commit = kwargs.pop('commit', True)
         q = None
         if args or kwargs:
-            q = make_fq(X(*args, **kwargs), add_tags=False, as_string=True)
+            q = make_fq(X(*args, **kwargs))
         solr.delete(id, q, commit=commit)
 
     def _optimize_index(self, solr):
@@ -156,7 +145,11 @@ class SolrSearcher(object):
                 db_query = db_query.filter(query_filter)
 
         instances = {}
-        db_query = db_query.filter(getattr(self.model, self.db_field).in_(ids))
+        if self.model is None:
+            model = db_query._mapper_zero().class_
+        else:
+            model = self.model
+        db_query = db_query.filter(getattr(model, self.db_field).in_(ids))
         for obj in db_query:
             instances[obj.id] = obj
 

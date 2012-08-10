@@ -1,15 +1,17 @@
 import re
+import sys
 from copy import copy, deepcopy
 import urllib
+import logging
 
-from pysolr import SolrError
+from .pysolr import SolrError
 
-from result import SearchResult, Document
-from facets import Facet, FacetValue, OPERATORS, OPS_FOR_FACET
-from queryfilter import QueryFilter
-from util import safe_solr_query, X, make_fq, convert_fq_to_filters_map, \
-    prepare_params, split_param, make_param, process_value, unpack_tuples
+from .result import SearchResult, Document
+from .facets import FacetField, FacetQuery, FacetValue
+from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq
 
+
+log = logging.getLogger(__name__)
 
 DEFAULT_ROWS = 10
 
@@ -27,23 +29,29 @@ class SolrParameterSetter(object):
         return solr_query
 
 class SolrQuery(object):
-    def __init__(self, searcher, q):
+    def __init__(self, searcher, q, *args, **kwargs):
         self.searcher = searcher
-        self.model = searcher.model
 
+        self._q_local_params = LocalParams(kwargs.pop('_local_params', None))
         self._q = q
-        self._fq = X()
+        self._q_args = args
+        self._q_kwargs = kwargs
+        self._fq = []
+        self._facet_fields = []
+        self._facet_queries = []
+        self._facet_dates = []
+        self._facet_ranges = []
         self._params = {}
 
         self._db_query = None
         self._db_query_filters = []
-        
+
         self._result_cache = None
 
     def __unicode__(self):
-        params = prepare_params(self._modify_params(deepcopy(self._params)))
+        params = self._prepare_params()
         p = []
-        p.append(('q', safe_solr_query(self._q).encode('utf-8')))
+        p.append(('q', self._make_q().encode('utf-8')))
         for k, v in params.items():
             if hasattr(v, '__iter__'):
                 for w in v:
@@ -98,151 +106,102 @@ class SolrQuery(object):
             self._result_cache = self._do_search(only_count)
         return self._result_cache
 
+    def _prepare_params(self, only_count=False):
+        params = deepcopy(self._params)
+        self._modify_params(params, only_count=only_count)
+        prepared_params = {}
+        for key, val in params.items():
+            if isinstance(val, tuple):
+                prepared_params[key] = ','.join(val)
+            elif isinstance(val, bool):
+                prepared_params[key] = unicode(val).lower()
+            elif val is None:
+                pass
+            else:
+                prepared_params[key] = val
+        return prepared_params
+
     def _modify_params(self, params, only_count=False):
+        def merge_params(params, merged_params):
+            for p, v in merged_params.items():
+                if hasattr(v, '__iter__'):
+                    params.setdefault(p, []).extend(v)
+                else:
+                    params[p] = v
+            return params
+        
         if only_count:
             params['rows'] = 0
         elif 'rows' not in params:
             params['rows'] = DEFAULT_ROWS
         if self._fq:
-            params['fq'] = make_fq(self._fq)
+            params['fq'] = [make_fq(x, local_params)
+                            for x, local_params in self._fq]
+        if 'qf' in params:
+            params['qf'] = ' '.join(['%s^%s' % (f, v) for f, v in params['qf']])
         if 'fl' not in params:
             params['fl'] = ('*', 'score')
-        # elif params.get('group') and 'group.field' in params \
-        #         and params['group.field'] not in params['fl']:
-        #     params['fl'] = params['fl'] + (params['group.field'],)
-        # elif 'score' not in params['fl']:
-        #     params['fl'] = params['fl'] + ('score',)
 
-        if 'facet.field' in params:
-            for i, facet_field in enumerate(params['facet.field']):
-                if hasattr(self.searcher, 'multi_valued_fields') \
-                        and facet_field in self.searcher.multi_valued_fields:
-                    params['facet.field'][i] = facet_field
-                else:
-                    params['facet.field'][i] = '{!ex=%s}%s' % (facet_field, facet_field)
-        
-        if 'facet.query' in params:
-            for i, facet_query in enumerate(params['facet.query']):
-                facet_field = facet_query.split(':')[0].strip()
-                if hasattr(self.searcher, 'multi_valued_fields') \
-                        and facet_field in self.searcher.multi_valued_fields:
-                    params['facet.query'][i] = facet_query
-                else:
-                    params['facet.query'][i] = '{!ex=%s}%s' % (facet_field, facet_query)
-        
-        # set default params from searcher
-        for p, v in self.searcher.default_params.items():
-            if p not in params:
-                params[p] = v
-        return params
+        if params.get('defType') == 'dismax' \
+                and self._q is None or self._q_args or self._q_kwargs:
+            params.pop('defType', None)
 
+        for facet_field in self._facet_fields:
+            params = merge_params(params, facet_field.get_params())
+                    
+        for facet_query in self._facet_queries:
+            params = merge_params(params, facet_query.get_params())
+
+    def _make_q(self):
+        if self._q is None and not self._q_args and not self._q_kwargs:
+            q = X(SafeUnicode(u'*:*'))
+        else:
+            q = X(self._q, *self._q_args, **self._q_kwargs)
+        return make_fq(q, self._q_local_params)
+            
     def _do_search(self, only_count=False):
-        params = self._modify_params(deepcopy(self._params), only_count=only_count)
-        # if 'fq' in params:
-        #     print 'fq:', params['fq']
-        # print params
-        raw_results = self.searcher.select(safe_solr_query(self._q), **prepare_params(params))
+        params = self._prepare_params(only_count=only_count)
+        raw_results = self.searcher.select(self._make_q(), **params)
 
-        results = SearchResult(self.searcher, raw_results.hits,
+        results = SearchResult(self, raw_results.hits,
                                self._db_query, self._db_query_filters)
+        self._process_facets(raw_results.facets)
+        
         if raw_results.grouped:
             results.add_grouped_docs(raw_results.grouped)
         else:
             results.add_docs(raw_results.docs)
-        results.add_facets(self._process_facets(raw_results.facets))
+            
+        results.add_facets(self._facet_fields, self._facet_queries,
+                           self._facet_dates, self._facet_ranges)
+
+        results.add_stats_fields(raw_results.stats.get('stats_fields'))
+            
         results.total_hits = getattr(raw_results, 'total_hits', raw_results.hits)
 
         return results
 
     def _process_facets(self, facets):
-        def grouped_list(l, group_by=2):
-            res = []
-            for i in range(len(l)):
-                if i % group_by == 0:
-                    res.append((l[i], l[i+1]))
-            return res
-
-        # example
-        # {'facet_fields': {'categories': ['13', 92746, '28', 73406, '15', 55351, '1307', 43146]}}
-
-        _facets = {'facet_fields': [], 'facet_queries': [], 'facet_dates': []}
-        if facets:
-            for f_key, f_value in facets['facet_fields'].items():
-                _facets['facet_fields'].append([f_key, grouped_list(f_value)])
-            for f_key, f_value in facets['facet_queries'].items():
-                _facets['facet_queries'].append((f_key, f_value))
-
-        # print _facets['facet_queries']
-        facets = []
-        # TODO: Remove facet_class_map variable
-        # needed to map facet queries to facet instance
-        facet_class_map = {}
-        filters_map = convert_fq_to_filters_map(self._fq)
-        # print filters_map
-
         # facet fields
-        for _facet in _facets['facet_fields']:
-            facet_name = _facet[0]
-            facet_cls = self.searcher._get_facet_cls(facet_name)
-            facet = facet_cls(self, name=facet_name)
-            facet_class_map[facet_cls] = facet
-            for fv_name, fv_count in _facet[1]:
-                selected = False
-                if facet_name in filters_map and fv_name in filters_map[facet_name]:
-                    selected = True
-                facet.add_value(FacetValue(facet_name, fv_name, fv_count, selected))
-            facets.append(facet)
-
+        for facet_field in self._facet_fields:
+            facet_field.process_data(facets['facet_fields'])
+        
         # facet queries
-        for facet_query, facet_count in _facets['facet_queries']:
-            facet_query = re.split('{!.*}', facet_query)[-1]
-            facet_name, facet_cond = facet_query.split(':')
-            facet_cls = self.searcher._get_facet_cls(facet_name)
-            if facet_cls not in facet_class_map:
-                facet = facet_cls(self, name=facet_name)
-                facet_class_map[facet_cls] = facet
-                for (fv_param, fv_val), fv_title, fv_help_text in unpack_tuples(facet.queries, 3):
-                    fv_field, fv_op = split_param(fv_param)
-                    if OPS_FOR_FACET[fv_op](fv_field, fv_val) == facet_query:
-                        break
-                selected = facet_name in filters_map and facet_cond in filters_map[facet_name]
-                fv_param = make_param(facet_name, fv_op)
-                fv_val = process_value(fv_val)
-                facet.add_value(FacetValue(fv_param, fv_val, facet_count,
-                                           selected, fv_title, fv_help_text))
-                facets.append(facet)
-            else:
-                facet = facet_class_map[facet_cls]
-                for (fv_param, fv_val), fv_title, fv_help_text in unpack_tuples(facet.queries, 3):
-                    fv_field, fv_op = split_param(fv_param)
-                    if OPS_FOR_FACET[fv_op](fv_field, fv_val) == facet_query:
-                        break
-                selected = facet_name in filters_map \
-                    and facet_cond in filters_map[facet_name]
-                fv_param = make_param(facet_name, fv_op)
-                fv_val = process_value(fv_val)
-                facet_class_map[facet_cls].add_value(
-                    FacetValue(fv_param, fv_val, facet_count, selected,
-                               fv_title, fv_help_text)
-                )
-        return facets
-
+        for facet_query in self._facet_queries:
+            facet_query.process_data(facets['facet_queries'])
+            
     def _clone(self, cls=None):
         cls = cls or self.__class__
-        clone = cls(self.searcher, self._q)
+        clone = cls(self.searcher, self._q, *self._q_args, **self._q_kwargs)
+        clone._q_local_params = deepcopy(self._q_local_params)
         clone._fq = deepcopy(self._fq)
+        clone._facet_fields = deepcopy(self._facet_fields)
+        clone._facet_queries = deepcopy(self._facet_queries)
         clone._params = deepcopy(self._params)
         clone._db_query = self._db_query
         clone._db_query_filters = copy(self._db_query_filters)
         return clone
-
-    def _clean_params(self, param):
-        params = []
-        for p in self._params:
-            if p.startswith(param):
-                params.append(p)
-        for p in params:
-            del self._params[p]
+    clone = _clone
 
     # Public methods
 
@@ -252,7 +211,8 @@ class SolrQuery(object):
             return self._fetch_results()
         except AttributeError, e:
             # catch AttributeError cause else __getattr__ will be called
-            raise RuntimeError(e.args[0])
+            log.exception(e)
+            raise RuntimeError(*e.args)
 
     def search(self, q):
         clone = self._clone()
@@ -260,7 +220,7 @@ class SolrQuery(object):
         return clone
 
     def all(self):
-        return self._clone()
+        return list(self.results)
 
     def count(self):
         return len(self._clone()._fetch_results(only_count=True))
@@ -269,13 +229,15 @@ class SolrQuery(object):
         return self._clone(InstancesSolrQuery).only('id')
 
     def filter(self, *args, **kwargs):
+        local_params = LocalParams(kwargs.pop('_local_params', None))
         clone = self._clone()
-        clone._fq = clone._fq & X(*args, **kwargs)
+        clone._fq.append((X(*args, **kwargs), local_params))
         return clone
 
     def exclude(self, *args, **kwargs):
+        local_params = LocalParams(kwargs.pop('_local_params', None))
         clone = self._clone()
-        clone._fq = clone._fq & ~X(*args, **kwargs)
+        clone._fq.append((~X(*args, **kwargs), local_params))
         return clone
 
     def with_db_query(self, db_query):
@@ -292,15 +254,30 @@ class SolrQuery(object):
     def only(self, *fields):
         return self.fl(fields)
 
-    def dismax(self, dismax='dismax'):
-        return self.defType(dismax)
+    def dismax(self):
+        return self.defType('dismax')
+    
+    def edismax(self):
+        return self.defType('edismax')
 
     def qf(self, fields):
         clone = self._clone()
         if isinstance(fields, dict):
-            clone._params['qf'] = ' '.join(['%s^%s' % (f, v) for f, v in fields.items()])
+            fields = fields.items()
+        clone._params['qf'] = fields
+        return clone
+
+    def field_weight(self, field_name, weight):
+        clone = self._clone()
+        if 'qf' not in clone._params:
+            clone._params['qf'] = []
+        qf = clone._params['qf']
+        for i, (f, w) in enumerate(qf):
+            if f == field_name:
+                qf[i] = (field_name, weight)
+                break
         else:
-            clone._params['qf'] = fields
+            qf.append((field_name, weight))
         return clone
 
     def order_by(self, *args):
@@ -327,90 +304,52 @@ class SolrQuery(object):
         clone._params[param_name] = value
         return clone
 
-    def facet(self, fields, limit=-1, offset=0, mincount=1, sort=True, missing=False, method='fc', params=None):
-        def add_field_or_query(clone, field_name):
-            facet_cls = clone.searcher._get_facet_cls(field_name)
-            if facet_cls and hasattr(facet_cls, 'queries'):
-                for (fv_field_op, fv_val), title, help_text in unpack_tuples(facet_cls.queries, 3):
-                    fv_field, fv_op = split_param(fv_field_op)
-                    if 'facet.query' not in clone._params:
-                        clone._params['facet.query'] = []
-                    if fv_field == field_name:
-                        clone._params['facet.query'].append(OPS_FOR_FACET.get(fv_op, 'exact')(field_name, fv_val))
-            else:
-                if 'facet.field' not in clone._params:
-                    clone._params['facet.field'] = []
-                clone._params['facet.field'].append(field_name)
-            if hasattr(facet_cls, 'default_params'):
-                for facet_param, val in facet_cls.default_params.items():
-                    clone._params['f.%s.facet.%s' % (field_name, facet_param)] = val
-            if params and field_name in params:
-                for facet_param, val in params[field_name].items():
-                    clone._params['f.%s.facet.%s' % (field_name, facet_param)] = val
-
+    def facet(self, limit=-1, offset=0, mincount=1, sort=True,
+              missing=False, method='fc'):
         clone = self._clone()
-        if fields:
-            if isinstance(fields, basestring):
-                fields = [fields]
-            for field_data in fields:
-                if isinstance(field_data, basestring):
-                    add_field_or_query(clone, field_data)
-                # elif isinstance(field_data, (list, tuple)) and len(field_data) > 0:
-                #     settings = {}
-                #     clone._params['facet.field'].append(field_data[0])
-                #     if len(field_data) >= 2:
-                #         settings['name'] = field_data[1]
-                #     if len(field_data) >= 3:
-                #         settings['model'] = field_data[2]
-                #     self._facet_settings[field_data[0]] = settings
-
-            clone._params['facet'] = True
-            clone._params['facet.limit'] = limit
-            clone._params['facet.offset'] = offset
-            clone._params['facet.mincount'] = mincount
-            clone._params['facet.sort'] = sort
-            clone._params['facet.missing'] = missing
-            clone._params['facet.method'] = method
-        else:
-            clone._clean_params('facet')
+        clone._params['facet'] = True
+        clone._params['facet.limit'] = limit
+        clone._params['facet.offset'] = offset
+        clone._params['facet.mincount'] = mincount
+        clone._params['facet.sort'] = sort
+        clone._params['facet.missing'] = missing
+        clone._params['facet.method'] = method
         return clone
-    facets = facet
 
+    def facet_field(self, field, _local_params=None, _instance_mapper=None, **kwargs):
+        clone = self._clone()
+        local_params = LocalParams(_local_params)
+        clone._facet_fields.append(
+            FacetField(field, local_params, instance_mapper=_instance_mapper, **kwargs))
+        return clone
+
+    def facet_query(self, *args, **kwargs):
+        clone = self._clone()
+        local_params = LocalParams(kwargs.pop('_local_params', None))
+        clone._facet_queries.append(
+            FacetQuery(X(*args, **kwargs), local_params))
+        return clone
+        
+    
     def group(self, field, limit=1, offset=None, sort=None, main=None, format=None, truncate=None):
         clone = self._clone()
-        if field:
-            default_params = self.searcher.default_params
-            clone._params['group'] = True
-            clone._params['group.ngroups'] = True
-            clone._params['group.field'] = field
-            clone._params['group.limit'] = limit or default_params.get('group.limit')
-            clone._params['group.offset'] = offset or default_params.get('group.offset')
-            clone._params['group.sort'] = format or default_params.get('group.sort')
-            clone._params['group.main'] = main or default_params.get('group.main')
-            clone._params['group.main'] = format or default_params.get('group.format')
-            clone._params['group.truncate'] = truncate or default_params.get('group.truncate')
-        else:
-            clone._clean_params('group')
+        default_params = self.searcher.default_params
+        clone._params['group'] = True
+        clone._params['group.ngroups'] = True
+        clone._params['group.field'] = field
+        clone._params['group.limit'] = limit or default_params.get('group.limit')
+        clone._params['group.offset'] = offset or default_params.get('group.offset')
+        clone._params['group.sort'] = sort or default_params.get('group.sort')
+        clone._params['group.main'] = main or default_params.get('group.main')
+        clone._params['group.format'] = format or default_params.get('group.format')
+        clone._params['group.truncate'] = truncate or default_params.get('group.truncate')
         return clone
 
-    collapse = group
-
-    def get_query_filter(self, filters=None, exclude_facets=None):
-        filters = filters or []
-        exclude_facets = set(exclude_facets or [])
-        qf = QueryFilter()
-        for f in filters:
-            qf.add_filter(f)
-        if 'facet.field' in self._params:
-            for field in self._params['facet.field']:
-                if field not in exclude_facets:
-                    qf.add_filter(field)
-        if 'facet.query' in self._params:
-            for facet_query in self._params['facet.query']:
-                field, cond = facet_query.split(':')
-                if field not in exclude_facets:
-                    qf.add_filter(field)
-        return qf
+    def stats(self, field):
+        clone = self._clone()
+        clone._params['stats'] = True
+        clone._params['stats.field'] = field
+        return clone
 
     def get(self, *args, **kwargs):
         clone = self.filter(*args, **kwargs).limit(1)
