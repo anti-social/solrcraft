@@ -97,8 +97,8 @@ class QueryTest(TestCase):
             s.solrs_read[0]._send_request.return_value = '''{
   "grouped":{
     "company":{
-      "matches":0,
-      "ngroups":0,
+      "matches":281,
+      "ngroups":109,
       "groups":[{
           "groupValue":"1",
           "doclist":{"numFound":9,"start":0,"docs":[
@@ -182,16 +182,21 @@ class QueryTest(TestCase):
             self.assertTrue('rows=24' in raw_query)
 
             r = q.results
-            self.assertEqual(len(r.docs), 2)
-            self.assertEqual(r.docs[0].id, '111')
-            self.assertEqual(r.docs[0].name, 'Test 1')
-            self.assertEqual(r.docs[0].grouped_count, 8)
-            self.assertEqual(r.docs[0].grouped_docs[-1].id, '333')
-            self.assertEqual(r.docs[0].grouped_docs[-1].name, 'Test 3')
-            self.assertEqual(r.docs[1].id, '555')
-            self.assertEqual(r.docs[1].name, 'Test 5')
-            self.assertEqual(len(r.docs[0].grouped_docs), 2)
+            grouped = r.get_grouped('company')
+            self.assertEqual(grouped.ngroups, 109)
+            self.assertEqual(grouped.ndocs, 281)
+            self.assertEqual(grouped.groups[0].ndocs, 9)
+            self.assertEqual(grouped.groups[0].docs[0].id, '111')
+            self.assertEqual(grouped.groups[0].docs[0].name, 'Test 1')
+            self.assertEqual(grouped.groups[0].docs[-1].id, '333')
+            self.assertEqual(grouped.groups[0].docs[-1].name, 'Test 3')
+            self.assertEqual(grouped.groups[1].ndocs, 1)
+            self.assertEqual(grouped.groups[1].docs[0].id, '555')
+            self.assertEqual(grouped.groups[1].docs[0].name, 'Test 5')
+            self.assertEqual(len(grouped.docs), 0)
+            
             self.assertEqual(len(r.facet_fields), 2)
+
             category_facet = r.get_facet_field('category')
             self.assertEqual(len(category_facet.values), 2)
             self.assertEqual(category_facet.values[0].value, '1')
@@ -200,11 +205,13 @@ class QueryTest(TestCase):
             self.assertEqual(category_facet.values[1].value, '2')
             self.assertEqual(category_facet.values[1].count, 2)
             self.assertEqual(category_facet.values[1].instance, {'id': 2, 'name': '2'})
+
             tag_facet = r.get_facet_field('tag')
             self.assertEqual(len(tag_facet.values), 3)
             self.assertEqual(tag_facet.values[-1].value, '1000')
             self.assertEqual(tag_facet.values[-1].count, 30)
             self.assertEqual(len(r.facet_queries), 1)
+
             price_stats = r.get_stats_field('price')
             self.assertEqual(len(r.stats_fields), 1)
             self.assertEqual(price_stats.min, 3.5)
@@ -251,14 +258,21 @@ class QueryTest(TestCase):
             self.assertTrue('group.field=company' in raw_query)
 
             r = q.results
-            self.assertEqual(len(r.docs), 4)
-            self.assertEqual(r.docs[0].id, '111')
-            self.assertEqual(r.docs[0].name, 'Test 1')
-            self.assertEqual(r.docs[2].id, '333')
-            self.assertEqual(r.docs[2].name, 'Test 3')
-            self.assertEqual(r.docs[3].id, '555')
-            self.assertEqual(r.docs[3].name, 'Test 5')
+            grouped = r.get_grouped('company')
+            self.assertEqual(grouped.ngroups, 216036)
+            self.assertEqual(grouped.ndocs, 3657093)
+            self.assertEqual(len(grouped.docs), 4)
+            self.assertEqual(grouped.docs[0].id, '111')
+            self.assertEqual(grouped.docs[0].name, 'Test 1')
+            self.assertEqual(grouped.docs[2].id, '333')
+            self.assertEqual(grouped.docs[2].name, 'Test 3')
+            self.assertEqual(grouped.docs[3].id, '555')
+            self.assertEqual(grouped.docs[3].name, 'Test 5')
 
+    def test_instance_mapper(self):
+        # TODO
+        pass
+            
 
 if __name__ == '__main__':
     from unittest import main

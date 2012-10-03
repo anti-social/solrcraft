@@ -4,7 +4,7 @@ class SolrResults(object):
     def __init__(self, query, hits, db_query=None, db_query_filters=[]):
         self.query = query
         self.searcher = self.query.searcher
-        self.hits = hits
+        self.ndocs = self.hits = hits
         self.docs = []
         self._all_docs = []
         self.facet_fields = []
@@ -15,8 +15,10 @@ class SolrResults(object):
         self._db_query = db_query
         self._db_query_filters = db_query_filters
 
+        self.groupeds = {}
+
     def __len__(self):
-        return self.hits
+        return self.ndocs
     
     def __iter__(self):
         return iter(self.docs)
@@ -28,28 +30,36 @@ class SolrResults(object):
         self.docs = [Document(d, results=self) for d in docs]
         self._all_docs = self.docs[:]
 
-    def add_grouped_docs(self, grouped):
+    def add_grouped_docs(self, raw_grouped):
         self.docs = []
         self._all_docs = []
-        for group_field, group_data in grouped.items():
+        for key, grouped_data in raw_grouped.items():
+            grouped = Grouped(key,
+                              grouped_data.get('ngroups'),
+                              grouped_data.get('matches'))
+            self.groupeds[key] = grouped
             # grouped format
-            if 'groups' in group_data:
-                groups = group_data['groups']
-                for group in groups:
-                    group_value = group['groupValue']
-                    group_doclist = group['doclist']
-                    group_docs = group_doclist['docs']
-                    group_hits = group_doclist['numFound']
-                    g_docs = [Document(d, results=self) for d in group_docs]
-                    doc = g_docs[0]
-                    self.docs.append(doc)
-                    self._all_docs.extend(g_docs)
-                    doc.grouped_docs = g_docs[1:]
-                    doc.grouped_count = group_hits - 1
+            if 'groups' in grouped_data:
+                groups = grouped_data['groups']
+                for group_data in groups:
+                    group = Group(group_data['groupValue'],
+                                  group_data['doclist']['numFound'])
+                    grouped.groups.append(group)
+                    for doc_data in group_data['doclist']['docs']:
+                        # TODO: make document cache
+                        # documents with identical ids should map to one object
+                        doc = Document(doc_data, results=self)
+                        group.add_doc(doc)
+                        self._all_docs.append(doc)
             # simple format
             else:
-                for doc in group_data['doclist']['docs']:
-                    self.docs.append(Document(doc, results=self))
+                for doc_data in grouped_data['doclist']['docs']:
+                    doc = Document(doc_data, results=self)
+                    grouped.add_doc(doc)
+                    self._all_docs.append(doc)
+
+    def get_grouped(self, key):
+        return self.groupeds.get(key)
 
     def add_stats_fields(self, stats_fields):
         if stats_fields:
@@ -78,25 +88,42 @@ class SolrResults(object):
         ids = []
         for doc in self._all_docs:
             ids.append(self.searcher.get_id(doc.id))
-            ids.extend([self.searcher.get_id(g_doc.id) for g_doc in doc.grouped_docs])
         instances = self.searcher.get_instances(ids, self._db_query,
                                                 self._db_query_filters)
 
-        for doc in self:
+        for doc in self._all_docs:
             doc._instance = instances.get(self.searcher.get_id(doc.id))
-            for g_doc in doc.grouped_docs:
-                g_doc._instance = instances.get(self.searcher.get_id(g_doc.id))
 
     @property
     def instances(self):
         return [doc.instance for doc in self if doc.instance]
 
+class Grouped(object):
+    def __init__(self, key, ngroups, ndocs):
+        self.key = key
+        self.ngroups = ngroups # present if group.ngroups=true else None
+        self.ndocs = ndocs
+        self.groups = [] # grouped format
+        self.docs = [] # simple format
+
+    def add_group(self, group):
+        self.groups.append(group)
+
+    def add_doc(self, doc):
+        self.docs.append(doc)
+    
+class Group(object):
+    def __init__(self, value, ndocs):
+        self.value = value
+        self.ndocs = ndocs
+        self.docs = []
+    
+    def add_doc(self, doc):
+        self.docs.append(doc)
     
 class Document(object):
     def __init__(self, doc, results=None):
         self.results = results
-        self.grouped_docs = []
-        self.grouped_count = 0
         for key in doc:
             setattr(self, key, doc[key])
 
