@@ -28,9 +28,6 @@ class SolrSearcher(object):
     db_field = 'id'
     query_cls = SolrQuery
 
-    default_params = {}
-    facets = []
-
     def __init__(self, solr_url=None, model=None, session=None, db_field=None, query_cls=None):
         self.solr_url = solr_url or self.solr_url
         self.solr_read_urls = self.solr_read_urls or []

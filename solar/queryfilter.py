@@ -76,10 +76,8 @@ class QueryFilter(object):
             if f.name == name:
                 return f
 
-    def add_ordering(self, ordering_settings=None, order_param='sort'):
-        ordering_filter = OrderingFilter(order_param, ordering_settings)
-        if self.ordering_filter is None:
-            self.ordering_filter = ordering_filter
+    def add_ordering(self, ordering_filter):
+        self.ordering_filter = ordering_filter
 
     def process_results(self, results):
         self.results = results
@@ -95,6 +93,7 @@ class QueryFilter(object):
             #         print facet
 
 class BaseFilter(object):
+
     def __init__(self, name):
         self.name = name
 
@@ -118,23 +117,35 @@ class BaseFilter(object):
 
 class Filter(BaseFilter):
     fq_connector = X.OR
+
+    def __init__(self, name, select_multiple=True):
+        super(Filter, self).__init__(name)
+        self.select_multiple = select_multiple
+
     
     def _filter_query(self, query, fqs):
         if fqs:
-            return query.filter(*fqs, _op=self.fq_connector, _local_params={'tag': self.name})
+            if self.select_multiple:
+                return query.filter(*[fq[0] for fq in fqs], _op=self.fq_connector,
+                                    _local_params={'tag': self.name})
+            else:
+                local_params = LocalParams({'tag': self.name})
+                local_params.update(fqs[-1][1])
+                return query.filter(fqs[-1][0],
+                                    _local_params=local_params)
         return query
 
     def _make_x(self, op, v):
         op_func = OPERATORS.get(op)
         if op_func:
-            return op_func(self.name, v)
+            return op_func(self.name, v), None
         
     def apply(self, query, params):
         fqs = []
         for op, v in self._filter_and_split_params(params):
-            x = self._make_x(op, v)
-            if x:
-                fqs.append(x)
+            x, local_params = self._make_x(op, v)
+            # if x:
+            fqs.append((x, local_params))
         return self._filter_query(query, fqs)
 
     def process_results(self, results, params):
@@ -145,6 +156,11 @@ class FacetFilterValue(object):
         self.filter_name = filter_name
         self.facet_value = facet_value
         self.selected = selected
+
+    def __unicode__(self):
+        if self.instance:
+            return unicode(self.instance)
+        return unicode(self.value)
 
     @property
     def value(self):
@@ -161,8 +177,11 @@ class FacetFilterValue(object):
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
     
-    def __init__(self, name, _local_params=None, _instance_mapper=None, **kwargs):
-        self.name = name
+    def __init__(self, name, filter_value_cls=None,
+                 _local_params=None, _instance_mapper=None,
+                 select_multiple=True, **kwargs):
+        super(FacetFilter, self).__init__(name, select_multiple)
+        self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(_local_params)
         self._instance_mapper = _instance_mapper
         self.kwargs = kwargs
@@ -191,11 +210,15 @@ class FacetFilter(Filter):
         query = super(FacetFilter, self).apply(query, params)
         local_params = LocalParams({'ex': self.name})
         local_params.update(self.local_params)
-        return query.facet_field(
+        query = query.facet_field(
             self.name, _local_params=local_params,
             _instance_mapper=self.instance_mapper, **self.kwargs)
+        return query
 
     def process_results(self, results, params):
+        self.values = []
+        self.all_values = []
+        self.selected_values = []
         for facet in results.facet_fields:
             if facet.local_params.get('ex') == self.name:
                 values = params.get(self.name, [])
@@ -205,49 +228,66 @@ class FacetFilter(Filter):
 
 class FacetQueryFilterValue(object):
     def __init__(self, name, *args, **kwargs):
-        self.name = name
+        self.filter_name = None
+        self.value = name
+        self.local_params = LocalParams(kwargs.pop('_local_params', None))
         self.fq = X(*args, **kwargs)
         self.facet_query = None
         self.selected = False
+
+    @property
+    def _key(self):
+        return '%s__%s' % (self.filter_name, self.value)
 
     @property
     def count(self):
         return self.facet_query.count
                     
 class FacetQueryFilter(Filter):
-    def __init__(self, name, *args):
-        super(FacetQueryFilter, self).__init__(name)
+    def __init__(self, name, *args, **kwargs):
+        super(FacetQueryFilter, self).__init__(name, kwargs.get('select_multiple'))
         self.filter_values = args
+        for fv in self.filter_values:
+            fv.filter_name = self.name
 
-    def get_value(self, name):
+    @property
+    def all_values(self):
+        return self.filter_values
+
+    @property
+    def selected_values(self):
+        return [fv for fv in self.filter_values if fv.selected]
+
+    @property
+    def values(self):
+        return [fv for fv in self.filter_values if not fv.selected]
+
+    def get_value(self, value):
         for filter_value in self.filter_values:
-            if filter_value.name == name:
+            if filter_value.value == value:
                 return filter_value
 
     def _make_x(self, op, value):
         for filter_value in self.filter_values:
-            if filter_value.name == value:
-                return filter_value.fq
-
-    def _key_for_filter_value(self, filter_value):
-        return '%s__%s' % (self.name, filter_value.name)
+            if filter_value.value == value:
+                return filter_value.fq, filter_value.local_params
                            
     def apply(self, query, params):
         query = super(FacetQueryFilter, self).apply(query, params)
         for filter_value in self.filter_values:
+            local_params = LocalParams({'key': filter_value._key, 'ex': self.name})
+            local_params.update(filter_value.local_params)
             query = query.facet_query(
                 filter_value.fq,
-                _local_params=[
-                    ('ex', self.name),
-                    ('key', self._key_for_filter_value(filter_value))])
+                _local_params=local_params)
         return query
 
     def process_results(self, results, params):
         for filter_value in self.filter_values:
             for facet_query in results.facet_queries:
-                if facet_query.local_params.get('key') == self._key_for_filter_value(filter_value):
+                if facet_query.local_params.get('key') == filter_value._key:
                     filter_value.facet_query = facet_query
-                    filter_value.selected = filter_value.name in params.get(self.name, [])
+                    filter_value.selected = filter_value.value in params.get(self.name, [])
 
 class RangeFilter(Filter):
     fq_connector = X.AND
@@ -278,43 +318,58 @@ class RangeFilter(Filter):
         self.min = self.stats.min
         self.max = self.stats.max
 
-class OrderingFilter(BaseFilter):
-    def __init__(self, order_param='sort', ordering_settings=None, default_order=None):
-        self.name = order_param
-        self.ordering_settings = []
-        self.order_value = default_order
-        if ordering_settings:
-            for i, (title, values, help_text) in enumerate(ordering_settings):
-                if isinstance(values, basestring):
-                    self.ordering_settings.append({'title': title,
-                                                   'values': ((values,), None),
-                                                   'aliases': (values, None),
-                                                   'help_text': help_text})
-                    if i == 0:
-                        self.order_value = self.order_value or values
-                else:
-                    if len(values) == 1:
-                        self.ordering_settings.append({'title': title,
-                                                       'values': (values[0], None),
-                                                       'aliases': (values[0][0], None),
-                                                       'help_text': help_text})
-                        if i == 0:
-                            self.order_value = self.order_value or values[0][0]
-                    elif len(values) == 2:
-                        self.ordering_settings.append({'title': title,
-                                                       'values': (values[0], values[1]),
-                                                       'aliases': (values[0][0], values[1][0]),
-                                                       'help_text': help_text})
-                        if i == 0:
-                            self.order_value = self.order_value or values[0][0]
+class OrderingValue(object):
+    ASC = 'asc'
+    DESC = 'desc'
+    
+    def __init__(self, value, fields):
+        self.value = value.strip()
+        if self.value.startswith('-'):
+            self.direction = self.DESC
+        else:
+            self.direction = self.ASC
+        if isinstance(fields, basestring):
+            self.fields = [fields]
+        else:
+            self.fields = fields
+        self.selected = False
+
+    @property
+    def asc(self):
+        return self.direction == self.ASC
+
+    @property
+    def desc(self):
+        return self.direction == self.DESC
 
     def apply(self, query, params):
-        self.order_value = params.get(self.name, self.order_value)
+        return query.order_by(*self.fields)
+        
+class OrderingFilter(BaseFilter):
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+        self.values = args
+        self.default_value = self.get_value(kwargs.get('default')) or self.values[0]
+        
+    def get_value(self, value):
+        for ordering_value in self.values:
+            if ordering_value.value == value:
+                return ordering_value
 
-        if self.ordering_settings:
-            for order_setting in self.ordering_settings:
-                if self.order_value in order_setting['aliases']:
-                    return query.order_by(*order_setting['values'][order_setting['aliases'].index(self.order_value)])
-            return query
-        else:
-            return query.order_by(self.order_value)
+    @property
+    def selected_value(self):
+        for ordering_value in self.values:
+            if ordering_value.selected:
+                return ordering_value
+        
+    def apply(self, query, params):
+        ordering_value = None
+        orderlist = params.get(self.name)
+        if orderlist:
+            ordering_value = self.get_value(orderlist[0].strip())
+
+        if not ordering_value:
+            ordering_value = self.default_value
+        
+        ordering_value.selected = True
+        return ordering_value.apply(query, params)

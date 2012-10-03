@@ -4,9 +4,9 @@ from copy import copy, deepcopy
 import urllib
 import logging
 
-from .pysolr import SolrError
+from pysolr import SolrError
 
-from .result import SearchResult, Document
+from .result import SolrResults, Document
 from .facets import FacetField, FacetQuery, FacetValue
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq
 
@@ -138,7 +138,7 @@ class SolrQuery(object):
             params['fq'] = [make_fq(x, local_params)
                             for x, local_params in self._fq]
         if 'qf' in params:
-            params['qf'] = ' '.join(['%s^%s' % (f, v) for f, v in params['qf']])
+            params['qf'] = ' '.join('%s^%s' % (f, w) for f, w in params['qf'] if w)
         if 'fl' not in params:
             params['fl'] = ('*', 'score')
 
@@ -163,7 +163,7 @@ class SolrQuery(object):
         params = self._prepare_params(only_count=only_count)
         raw_results = self.searcher.select(self._make_q(), **params)
 
-        results = SearchResult(self, raw_results.hits,
+        results = SolrResults(self, raw_results.hits,
                                self._db_query, self._db_query_filters)
         self._process_facets(raw_results.facets)
         
@@ -267,7 +267,7 @@ class SolrQuery(object):
         clone._params['qf'] = fields
         return clone
 
-    def field_weight(self, field_name, weight):
+    def field_weight(self, field_name, weight=1):
         clone = self._clone()
         if 'qf' not in clone._params:
             clone._params['qf'] = []
@@ -333,16 +333,15 @@ class SolrQuery(object):
     
     def group(self, field, limit=1, offset=None, sort=None, main=None, format=None, truncate=None):
         clone = self._clone()
-        default_params = self.searcher.default_params
         clone._params['group'] = True
         clone._params['group.ngroups'] = True
         clone._params['group.field'] = field
-        clone._params['group.limit'] = limit or default_params.get('group.limit')
-        clone._params['group.offset'] = offset or default_params.get('group.offset')
-        clone._params['group.sort'] = sort or default_params.get('group.sort')
-        clone._params['group.main'] = main or default_params.get('group.main')
-        clone._params['group.format'] = format or default_params.get('group.format')
-        clone._params['group.truncate'] = truncate or default_params.get('group.truncate')
+        clone._params['group.limit'] = limit
+        clone._params['group.offset'] = offset
+        clone._params['group.sort'] = sort
+        clone._params['group.main'] = main
+        clone._params['group.format'] = format
+        clone._params['group.truncate'] = truncate
         return clone
 
     def stats(self, field):

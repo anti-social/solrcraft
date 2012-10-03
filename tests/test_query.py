@@ -5,9 +5,9 @@ from unittest import TestCase
 
 from mock import patch
 
-from solar import SolrSearcher
-from solar import func
+from solar.searcher import SolrSearcher
 from solar.util import X, make_fq
+from solar import func
 
 
 class QueryTest(TestCase):
@@ -91,7 +91,7 @@ class QueryTest(TestCase):
             q.exclude(status__in=[1, 2, 3])._prepare_params()['fq'],
             [u"(NOT (status:1 OR status:2 OR status:3))"])
 
-    def test_search(self):
+    def test_search_grouped_main(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):
             s.solrs_read[0]._send_request.return_value = '''{
@@ -165,34 +165,6 @@ class QueryTest(TestCase):
             q = q.offset(48).limit(24)
             raw_query = str(q)
 
-            
-            ## Usecases for using facet values with object mapping
-            
-            # # 1
-            # for fv in q.results.get_facet_field('category').values:
-            #     print fv.instance, fv.count
-
-            # # 2
-            # tag_facet = q.results.get_facet_field('tag')
-            # tags = db.session.query(Tag).filter(Tag.id.in_(tag_facet.values)).all()
-            # tags_map = dict((str(t.id), t) for t in tags)
-            # for fv in tag_facet.values:
-            #     tag = tags_map.get(fv.value)
-            #     print tag, fv.count
-
-            # # 2.5
-            # def iter_tag_counts(tag_facet):
-            #     ids = [tag_id for tag_id, count in tag_facet.counts]
-            #     tags = db.session.query(Tag).filter(Tag.id.in_(tag_facet.values))
-            #     tags_map = dict((str(t.id), t) for t in tags)
-            #     for tag_id, count in tag_facet.counts:
-            #         yield tags_map[tag_id], count
-
-            # tag_counts = iter_tag_counts(tag_facet)
-            # for tag, count in tag_counts:
-            #     print tag, count
-
-
             self.assertTrue('facet=true' in raw_query)
             self.assertTrue('facet.field=%s' % quote_plus('{!ex=category}category') in raw_query)
             self.assertTrue('f.category.facet.mincount=5' in raw_query)
@@ -239,6 +211,53 @@ class QueryTest(TestCase):
             self.assertEqual(price_stats.max, 892.0)
             self.assertEqual(price_stats.count, 1882931)
             self.assertEqual(price_stats.missing, 556686)
+
+    def test_search_grouped_simple(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''{
+  "grouped": {
+    "company": {
+        "matches": 3657093,
+        "ngroups": 216036,
+        "doclist": {
+          "numFound": 3657093,
+          "start": 0,
+          "docs": [
+            {
+              "id":"111",
+              "name":"Test 1",
+              "company":"1"},
+            {
+              "id":"222",
+              "name":"Test 2",
+              "company":"1"},
+            {
+              "id":"333",
+              "name":"Test 3",
+              "company":"1"},
+            {
+              "id":"555",
+              "name":"Test 5",
+              "company":"3"}]}}}}'''
+
+            q = s.search()
+            q = q.group('company', limit=3, format='simple')
+            raw_query = str(q)
+
+            self.assertTrue('group=true' in raw_query)
+            self.assertTrue('group.limit=3' in raw_query)
+            self.assertTrue('group.format=simple' in raw_query)
+            self.assertTrue('group.field=company' in raw_query)
+
+            r = q.results
+            self.assertEqual(len(r.docs), 4)
+            self.assertEqual(r.docs[0].id, '111')
+            self.assertEqual(r.docs[0].name, 'Test 1')
+            self.assertEqual(r.docs[2].id, '333')
+            self.assertEqual(r.docs[2].name, 'Test 3')
+            self.assertEqual(r.docs[3].id, '555')
+            self.assertEqual(r.docs[3].name, 'Test 5')
 
 
 if __name__ == '__main__':

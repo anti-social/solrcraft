@@ -1,6 +1,6 @@
 from .stats import Stats
 
-class SearchResult(object):
+class SolrResults(object):
     def __init__(self, query, hits, db_query=None, db_query_filters=[]):
         self.query = query
         self.searcher = self.query.searcher
@@ -32,18 +32,24 @@ class SearchResult(object):
         self.docs = []
         self._all_docs = []
         for group_field, group_data in grouped.items():
-            groups = group_data['groups']
-            for group in groups:
-                group_value = group['groupValue']
-                group_doclist = group['doclist']
-                group_docs = group_doclist['docs']
-                group_hits = group_doclist['numFound']
-                g_docs = [Document(d, results=self) for d in group_docs]
-                doc = g_docs[0]
-                self.docs.append(doc)
-                self._all_docs.extend(g_docs)
-                doc.grouped_docs = g_docs[1:]
-                doc.grouped_count = group_hits - 1
+            # grouped format
+            if 'groups' in group_data:
+                groups = group_data['groups']
+                for group in groups:
+                    group_value = group['groupValue']
+                    group_doclist = group['doclist']
+                    group_docs = group_doclist['docs']
+                    group_hits = group_doclist['numFound']
+                    g_docs = [Document(d, results=self) for d in group_docs]
+                    doc = g_docs[0]
+                    self.docs.append(doc)
+                    self._all_docs.extend(g_docs)
+                    doc.grouped_docs = g_docs[1:]
+                    doc.grouped_count = group_hits - 1
+            # simple format
+            else:
+                for doc in group_data['doclist']['docs']:
+                    self.docs.append(Document(doc, results=self))
 
     def add_stats_fields(self, stats_fields):
         if stats_fields:
@@ -85,6 +91,7 @@ class SearchResult(object):
     def instances(self):
         return [doc.instance for doc in self if doc.instance]
 
+    
 class Document(object):
     def __init__(self, doc, results=None):
         self.results = results

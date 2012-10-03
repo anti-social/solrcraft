@@ -5,11 +5,11 @@ from unittest import TestCase
 
 from mock import patch
 
-from solar import SolrSearcher
+from solar.searcher import SolrSearcher
 from solar.queryfilter import (
     QueryFilter, FacetFilter, FacetFilterValue,
     FacetQueryFilter, FacetQueryFilterValue, RangeFilter,
-    )
+    OrderingFilter, OrderingValue)
 
 
 class CategoryFilterValue(FacetFilterValue):
@@ -63,12 +63,19 @@ class QueryTest(TestCase):
                         'week_ago',
                         date_created__gte='NOW/DAY-7DAY')))
             qf.add_filter(RangeFilter('price'))
+            qf.add_ordering(
+                OrderingFilter(
+                    'sort',
+                    OrderingValue('-score', '-score'),
+                    OrderingValue('price', 'price'),
+                    OrderingValue('-price', '-price')))
 
             params = {
                 'category': ['5', '13'],
                 'date_created': ['today'],
                 'price__gte': ['100'],
                 'price__lte': ['200'],
+                'sort': ['-price'],
                 }
 
             q = qf.apply(q, params)
@@ -83,6 +90,7 @@ class QueryTest(TestCase):
             self.assertTrue('fq=%s' % quote_plus('{!tag=category}(category:5 OR category:13)') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=price}price:[100 TO *] AND price:[* TO 200]') in raw_query)
+            self.assertTrue('sort=%s' % quote_plus('price desc') in raw_query)
 
             results = q.results
             with patch.object(s.solrs_read[0], '_send_request'):
@@ -132,6 +140,10 @@ class QueryTest(TestCase):
                 self.assertEqual(date_created_filter.get_value('today').count, 28)
                 self.assertEqual(date_created_filter.get_value('today').selected, True)
                 self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
+
+                ordering_filter = qf.ordering_filter
+                self.assertEqual(ordering_filter.get_value('-price').selected, True)
+                self.assertEqual(ordering_filter.get_value('-price').direction, OrderingValue.DESC)
             
 
 if __name__ == '__main__':
