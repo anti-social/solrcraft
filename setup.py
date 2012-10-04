@@ -18,7 +18,7 @@ setup(
     keywords = "solr solar pysolr",
     url = "https://github.com/anti-social/solar",
     packages=find_packages(exclude=["tests.*", "tests"]),
-    long_description=read('README'),
+    long_description=read('README.rst'),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Libraries",
