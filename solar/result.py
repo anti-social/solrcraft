@@ -49,7 +49,9 @@ class SolrResults(object):
             # simple format
             else:
                 for doc in group_data['doclist']['docs']:
-                    self.docs.append(Document(doc, results=self))
+                    doc = Document(doc, results=self)
+                    self.docs.append(doc)
+                    self._all_docs.append(doc)
 
     def add_stats_fields(self, stats_fields):
         if stats_fields:
@@ -78,14 +80,12 @@ class SolrResults(object):
         ids = []
         for doc in self._all_docs:
             ids.append(self.searcher.get_id(doc.id))
-            ids.extend([self.searcher.get_id(g_doc.id) for g_doc in doc.grouped_docs])
-        instances = self.searcher.get_instances(ids, self._db_query,
-                                                self._db_query_filters)
+        
+        instances = self.searcher.get_instances(
+            ids, self._db_query, self._db_query_filters)
 
-        for doc in self:
+        for doc in self._all_docs:
             doc._instance = instances.get(self.searcher.get_id(doc.id))
-            for g_doc in doc.grouped_docs:
-                g_doc._instance = instances.get(self.searcher.get_id(g_doc.id))
 
     @property
     def instances(self):
