@@ -31,27 +31,29 @@ class SolrResults(object):
     def add_grouped_docs(self, grouped):
         self.docs = []
         self._all_docs = []
-        for group_field, group_data in grouped.items():
-            # grouped format
-            if 'groups' in group_data:
-                groups = group_data['groups']
-                for group in groups:
-                    group_value = group['groupValue']
-                    group_doclist = group['doclist']
-                    group_docs = group_doclist['docs']
-                    group_hits = group_doclist['numFound']
-                    g_docs = [Document(d, results=self) for d in group_docs]
-                    doc = g_docs[0]
-                    self.docs.append(doc)
-                    self._all_docs.extend(g_docs)
-                    doc.grouped_docs = g_docs[1:]
-                    doc.grouped_count = group_hits - 1
-            # simple format
-            else:
-                for doc in group_data['doclist']['docs']:
-                    doc = Document(doc, results=self)
-                    self.docs.append(doc)
-                    self._all_docs.append(doc)
+        # process only first grouped section
+        group_field, group_data = grouped.items()[0]
+        self.hits = group_data.get('ngroups', 0)
+        # grouped format
+        if 'groups' in group_data:
+            groups = group_data['groups']
+            for group in groups:
+                group_value = group['groupValue']
+                group_doclist = group['doclist']
+                group_docs = group_doclist['docs']
+                group_hits = group_doclist['numFound']
+                g_docs = [Document(d, results=self) for d in group_docs]
+                doc = g_docs[0]
+                self.docs.append(doc)
+                self._all_docs.extend(g_docs)
+                doc.grouped_docs = g_docs[1:]
+                doc.grouped_count = group_hits - 1
+        # simple format
+        else:
+            for doc in group_data['doclist']['docs']:
+                doc = Document(doc, results=self)
+                self.docs.append(doc)
+                self._all_docs.append(doc)
 
     def add_stats_fields(self, stats_fields):
         if stats_fields:
