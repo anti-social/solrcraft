@@ -188,7 +188,7 @@ def make_fq(x, local_params=None):
             if isinstance(child, tuple):
                 parts = [fq_from_tuple(child)]
             elif isinstance(child, basestring):
-                parts = [child]
+                parts = [safe_solr_input(child)]
             else:
                 parts = _make_fq(child, level+1)
             fq += parts

@@ -2,7 +2,7 @@
 from datetime import datetime
 from unittest import TestCase
 
-from solar.util import X, make_fq
+from solar.util import SafeUnicode, X, make_fq
 
 class UtilTest(TestCase):
     def test_X(self):
@@ -52,6 +52,11 @@ class UtilTest(TestCase):
                          u"(NOT status:1)")
         self.assertEqual(make_fq(~X(status__in=[1, 2, 3])),
                          u"(NOT (status:1 OR status:2 OR status:3))")
+        self.assertEqual(make_fq(X(u"status:0 OR status:1")),
+                         u"status\\:0 or status\\:1")
+        self.assertEqual(make_fq(X(SafeUnicode(u"status:0 OR status:1"))),
+                         u"status:0 OR status:1")
+        
                  
 if __name__ == '__main__':
     from unittest import main
