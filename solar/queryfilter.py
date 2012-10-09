@@ -227,14 +227,19 @@ class FacetFilter(Filter):
                     self.add_value(self.filter_value_cls(self.name, fv, selected))
 
 class FacetQueryFilterValue(object):
-    def __init__(self, name, *args, **kwargs):
+    def __init__(self, name, fq, _local_params=None, title=None, **kwargs):
         self.filter_name = None
         self.value = name
-        self.local_params = LocalParams(kwargs.pop('_local_params', None))
-        self.fq = X(*args, **kwargs)
+        self.local_params = LocalParams(_local_params)
+        self.fq = fq
+        self.title = title
+        self.opts = kwargs
         self.facet_query = None
         self.selected = False
 
+    def __unicode__(self):
+        return unicode(self.title)
+                    
     @property
     def _key(self):
         return '%s__%s' % (self.filter_name, self.value)
@@ -242,7 +247,7 @@ class FacetQueryFilterValue(object):
     @property
     def count(self):
         return self.facet_query.count
-                    
+
 class FacetQueryFilter(Filter):
     def __init__(self, name, *args, **kwargs):
         super(FacetQueryFilter, self).__init__(name, kwargs.get('select_multiple'))
@@ -322,7 +327,7 @@ class OrderingValue(object):
     ASC = 'asc'
     DESC = 'desc'
     
-    def __init__(self, value, fields):
+    def __init__(self, value, fields, title=None, **kwargs):
         self.value = value.strip()
         if self.value.startswith('-'):
             self.direction = self.DESC
@@ -332,7 +337,12 @@ class OrderingValue(object):
             self.fields = [fields]
         else:
             self.fields = fields
+        self.title = title
+        self.opts = kwargs
         self.selected = False
+
+    def __unicode__(self):
+        return unicode(self.title)
 
     @property
     def asc(self):

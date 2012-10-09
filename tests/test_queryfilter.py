@@ -5,6 +5,7 @@ from unittest import TestCase
 
 from mock import patch
 
+from solar import X
 from solar.searcher import SolrSearcher
 from solar.queryfilter import (
     QueryFilter, FacetFilter, FacetFilterValue,
@@ -58,10 +59,13 @@ class QueryTest(TestCase):
                     'date_created',
                     FacetQueryFilterValue(
                         'today',
-                        date_created__gte='NOW/DAY-1DAY'),
+                        X(date_created__gte='NOW/DAY-1DAY'),
+                        title='Only new',
+                        help_text='Documents one day later'),
                     FacetQueryFilterValue(
                         'week_ago',
-                        date_created__gte='NOW/DAY-7DAY')))
+                        X(date_created__gte='NOW/DAY-7DAY'),
+                        title='Week ago')))
             qf.add_filter(RangeFilter('price'))
             qf.add_ordering(
                 OrderingFilter(
@@ -139,6 +143,8 @@ class QueryTest(TestCase):
                 date_created_filter = qf.get_filter('date_created')
                 self.assertEqual(date_created_filter.get_value('today').count, 28)
                 self.assertEqual(date_created_filter.get_value('today').selected, True)
+                self.assertEqual(date_created_filter.get_value('today').title, 'Only new')
+                self.assertEqual(date_created_filter.get_value('today').opts['help_text'], 'Documents one day later')
                 self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
 
                 ordering_filter = qf.ordering_filter
