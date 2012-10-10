@@ -121,6 +121,7 @@ class QueryTest(TestCase):
                 self.assertEqual(category_filter.all_values[0].value, '100')
                 self.assertEqual(category_filter.all_values[0].count, 500)
                 self.assertEqual(category_filter.all_values[0].selected, False)
+                self.assertEqual(category_filter.all_values[0].title, u'100')
                 self.assertEqual(category_filter.all_values[1].value, '5')
                 self.assertEqual(category_filter.all_values[1].count, 10)
                 self.assertEqual(category_filter.all_values[1].selected, True)

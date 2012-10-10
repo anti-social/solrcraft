@@ -152,15 +152,23 @@ class Filter(BaseFilter):
         pass
 
 class FacetFilterValue(object):
-    def __init__(self, filter_name, facet_value, selected):
+    def __init__(self, filter_name, facet_value, selected, title=None, **kwargs):
         self.filter_name = filter_name
         self.facet_value = facet_value
         self.selected = selected
+        self._title = title
+        self.opts = kwargs
 
     def __unicode__(self):
-        if self.instance:
+        return unicode(self.title)
+
+    @property
+    def title(self):
+        if self._title:
+            return self._title
+        elif self.instance:
             return unicode(self.instance)
-        return unicode(self.value)
+        return self.value
 
     @property
     def value(self):
