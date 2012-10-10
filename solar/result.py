@@ -4,7 +4,7 @@ class SolrResults(object):
     def __init__(self, query, hits, db_query=None, db_query_filters=[]):
         self.query = query
         self.searcher = self.query.searcher
-        self.hits = hits
+        self.hits = self.total_hits = hits
         self.docs = []
         self._all_docs = []
         self.facet_fields = []
@@ -36,6 +36,7 @@ class SolrResults(object):
         # grouped format
         if 'groups' in group_data:
             self.hits = group_data.get('ngroups', 0)
+            self.total_hits = group_data.get('matches', 0)
             groups = group_data['groups']
             for group in groups:
                 group_value = group['groupValue']
@@ -50,7 +51,7 @@ class SolrResults(object):
                 doc.grouped_count = group_hits - 1
         # simple format
         else:
-            self.hits = group_data['matches']
+            self.hits = self.total_hits = group_data['matches']
             for doc in group_data['doclist']['docs']:
                 doc = Document(doc, results=self)
                 self.docs.append(doc)

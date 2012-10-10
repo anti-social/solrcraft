@@ -177,8 +177,6 @@ class SolrQuery(object):
 
         results.add_stats_fields(raw_results.stats.get('stats_fields'))
             
-        results.total_hits = getattr(raw_results, 'total_hits', raw_results.hits)
-
         return results
 
     def _process_facets(self, facets):
