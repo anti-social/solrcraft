@@ -33,9 +33,9 @@ class SolrResults(object):
         self._all_docs = []
         # process only first grouped section
         group_field, group_data = grouped.items()[0]
-        self.hits = group_data.get('ngroups', 0)
         # grouped format
         if 'groups' in group_data:
+            self.hits = group_data.get('ngroups', 0)
             groups = group_data['groups']
             for group in groups:
                 group_value = group['groupValue']
@@ -50,6 +50,7 @@ class SolrResults(object):
                 doc.grouped_count = group_hits - 1
         # simple format
         else:
+            self.hits = group_data['matches']
             for doc in group_data['doclist']['docs']:
                 doc = Document(doc, results=self)
                 self.docs.append(doc)
