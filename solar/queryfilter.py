@@ -219,12 +219,13 @@ class FacetFilter(Filter):
         self.values = []
         self.all_values = []
         self.selected_values = []
+        selected_values = set(params.get(self.name, []))
         for facet in results.facet_fields:
             if facet.local_params.get('ex') == self.name:
-                values = params.get(self.name, [])
                 for fv in facet.values:
-                    selected = fv.value in values
+                    selected = fv.value in selected_values
                     self.add_value(self.filter_value_cls(self.name, fv, selected))
+                break
 
 class FacetQueryFilterValue(object):
     def __init__(self, name, fq, _local_params=None, title=None, **kwargs):
