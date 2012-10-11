@@ -21,7 +21,11 @@ setup(
     long_description=read('README.rst'),
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "Topic :: Libraries",
+        "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+        "Topic :: Software Development :: Libraries :: Python Modules",
     ],
 )
