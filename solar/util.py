@@ -28,6 +28,9 @@ class SafeUnicode(unicode):
 def safe_solr_input(value):
     if isinstance(value, (SafeString, SafeUnicode)):
         return value
+
+    if not isinstance(value, basestring):
+        value = unicode(value)
     
     for w in SPECIAL_WORDS:
         value = re.sub(r'(\A|\s+)(%s)(\s+|\Z)' % w, lambda m: m.group(0).lower(), value)
@@ -142,7 +145,7 @@ def process_value(v):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
     if isinstance(v, basestring) and SOLR_DATETIME_RE.match(v):
         return v
-    return safe_solr_input(unicode(v))
+    return safe_solr_input(v)
 
 def process_field(field, op, value):
     if op == 'exact':

@@ -65,6 +65,8 @@ class UtilTest(TestCase):
                          u"status\\:0 or status\\:1")
         self.assertEqual(make_fq(X(SafeUnicode(u"status:0 OR status:1"))),
                          u"status:0 OR status:1")
+        self.assertEqual(make_fq(X(status=SafeUnicode(u'"0"'))),
+                         u'status:"0"')
         
                  
 if __name__ == '__main__':
