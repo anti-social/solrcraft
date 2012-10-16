@@ -15,7 +15,7 @@ def isnull_op(f, v):
     return
 
 OPERATORS = {
-    'exact': lambda f, v: X(**{f: v}),
+    'exact': lambda f, v: X(**{'%s__exact' % f: v}),
     'gte': lambda f, v: X(**{'%s__gte' % f: v}),
     'gt': lambda f, v: X(**{'%s__gt' % f: v}),
     'lte': lambda f, v: X(**{'%s__lte' % f: v}),

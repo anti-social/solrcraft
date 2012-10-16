@@ -145,7 +145,9 @@ def process_value(v):
     return safe_solr_input(unicode(v))
 
 def process_field(field, op, value):
-    if op == 'gte':
+    if op == 'exact':
+        return '%s:"%s"' % (field, process_value(value))
+    elif op == 'gte':
         return '%s:[%s TO *]' % (field, process_value(value))
     elif op == 'lte':
         return '%s:[* TO %s]' % (field, process_value(value))
@@ -211,7 +213,7 @@ def make_fq(x, local_params=None):
 def split_param(param):
     field_op = param.split('__')
     if len(field_op) == 1:
-        return field_op[0], 'exact'
+        return field_op[0], None
     return field_op[0], field_op[1]
 
 def make_param(param, op):

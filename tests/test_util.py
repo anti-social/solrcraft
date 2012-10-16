@@ -9,7 +9,8 @@ class UtilTest(TestCase):
         self.assertEqual(safe_solr_input('SEPARATOR'), 'SEPARATOR')
         self.assertEqual(safe_solr_input(' AND one OR two  OR'), ' and one or two  or')
         self.assertEqual(safe_solr_input('AND OR NOT TO'), 'and or not to')
-        self.assertEqual(safe_solr_input('\\+-&|!(){}[]^"~*?:'), '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:')
+        self.assertEqual(safe_solr_input('\\+-&|!(){}[]^"~*?:'),
+                         '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:')
     
     def test_X(self):
         self.assertEqual(unicode(X(status=0)),
@@ -42,6 +43,8 @@ class UtilTest(TestCase):
                          u"status:0 AND (company_status:0 OR company_status:6)")
         self.assertEqual(make_fq(X(status=0) | X(company_status=0)),
                          u"(status:0 OR company_status:0)")
+        self.assertEqual(make_fq(X(manufacturer__exact='Chuck Norris')),
+                         u'manufacturer:"Chuck Norris"')
         self.assertEqual(make_fq(X(with_photo=True)),
                          u"with_photo:1")
         self.assertEqual(make_fq(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
