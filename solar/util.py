@@ -30,7 +30,7 @@ def safe_solr_input(value):
         return value
     
     for w in SPECIAL_WORDS:
-        value = value.replace(w, w.lower())
+        value = re.sub(r'(\A|\s+)(%s)(\s+|\Z)' % w, lambda m: m.group(0).lower(), value)
 
     for c in SPECIAL_CHARACTERS:
         value = value.replace(c, r'\%s' % c)

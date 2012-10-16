@@ -2,9 +2,15 @@
 from datetime import datetime
 from unittest import TestCase
 
-from solar.util import SafeUnicode, X, make_fq
+from solar.util import SafeUnicode, safe_solr_input, X, make_fq
 
 class UtilTest(TestCase):
+    def test_safe_solr_input(self):
+        self.assertEqual(safe_solr_input('SEPARATOR'), 'SEPARATOR')
+        self.assertEqual(safe_solr_input(' AND one OR two  OR'), ' and one or two  or')
+        self.assertEqual(safe_solr_input('AND OR NOT TO'), 'and or not to')
+        self.assertEqual(safe_solr_input('\\+-&|!(){}[]^"~*?:'), '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:')
+    
     def test_X(self):
         self.assertEqual(unicode(X(status=0)),
                          u"(AND: ('status', 0))")
