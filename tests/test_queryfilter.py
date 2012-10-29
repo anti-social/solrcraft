@@ -52,7 +52,7 @@ class QueryTest(TestCase):
             qf = QueryFilter()
             qf.add_filter(
                 CategoryFilter(
-                    'category', mincount=1,
+                    'cat', 'category', mincount=1,
                     _local_params={'cache': 'false'}))
             qf.add_filter(
                 FacetQueryFilter(
@@ -75,7 +75,7 @@ class QueryTest(TestCase):
                     OrderingValue('-price', '-price')))
 
             params = {
-                'category': ['5', '13'],
+                'cat': ['5', '13'],
                 'date_created': ['today'],
                 'price__gte': ['100'],
                 'price__lte': ['200'],
@@ -86,12 +86,12 @@ class QueryTest(TestCase):
             raw_query = str(q)
 
             self.assertTrue('facet=true' in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!ex=category cache=false}category') in raw_query)
+            self.assertTrue('facet.field=%s' % quote_plus('{!ex=cat cache=false}category') in raw_query)
             self.assertTrue('facet.query=%s' % quote_plus('{!ex=date_created key=date_created__today}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
             self.assertTrue('facet.query=%s' % quote_plus('{!ex=date_created key=date_created__week_ago}date_created:[NOW/DAY-7DAY TO *]') in raw_query)
             # self.assertTrue('stats=true' in raw_query)
             # self.assertTrue('stats.field=price' in raw_query)
-            self.assertTrue('fq=%s' % quote_plus('{!tag=category}(category:"5" OR category:"13")') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!tag=cat}(category:"5" OR category:"13")') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=price}price:[100 TO *] AND price:[* TO 200]') in raw_query)
             self.assertTrue('sort=%s' % quote_plus('price desc') in raw_query)
@@ -115,9 +115,10 @@ class QueryTest(TestCase):
                 
                 qf.process_results(results)
 
-                category_filter = qf.get_filter('category')
+                category_filter = qf.get_filter('cat')
                 self.assertTrue(isinstance(category_filter, CategoryFilter))
-                self.assertEqual(category_filter.name, 'category')
+                self.assertEqual(category_filter.name, 'cat')
+                self.assertEqual(category_filter.field, 'category')
                 self.assertEqual(category_filter.all_values[0].value, '100')
                 self.assertEqual(category_filter.all_values[0].count, 500)
                 self.assertEqual(category_filter.all_values[0].selected, False)

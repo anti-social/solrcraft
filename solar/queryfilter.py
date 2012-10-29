@@ -118,8 +118,9 @@ class BaseFilter(object):
 class Filter(BaseFilter):
     fq_connector = X.OR
 
-    def __init__(self, name, select_multiple=True):
+    def __init__(self, name, field=None, select_multiple=True):
         super(Filter, self).__init__(name)
+        self.field = field or self.name
         self.select_multiple = select_multiple
 
     
@@ -138,7 +139,7 @@ class Filter(BaseFilter):
     def _make_x(self, op, v):
         op_func = OPERATORS.get(op)
         if op_func:
-            return op_func(self.name, v), None
+            return op_func(self.field, v), None
         
     def apply(self, query, params):
         fqs = []
@@ -185,10 +186,11 @@ class FacetFilterValue(object):
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
     
-    def __init__(self, name, filter_value_cls=None,
+    def __init__(self, name, field=None, filter_value_cls=None,
                  _local_params=None, _instance_mapper=None,
                  select_multiple=True, **kwargs):
-        super(FacetFilter, self).__init__(name, select_multiple)
+        super(FacetFilter, self).__init__(name, field=field,
+                                          select_multiple=select_multiple)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(_local_params)
         self._instance_mapper = _instance_mapper
@@ -209,9 +211,9 @@ class FacetFilter(Filter):
         else:
             self.values.append(fv)
 
-    def get_value(self, name):
+    def get_value(self, value):
         for filter_value in self.all_values:
-            if filter_value.value == name:
+            if filter_value.value == value:
                 return filter_value
 
     def apply(self, query, params):
@@ -219,7 +221,7 @@ class FacetFilter(Filter):
         local_params = LocalParams({'ex': self.name})
         local_params.update(self.local_params)
         query = query.facet_field(
-            self.name, _local_params=local_params,
+            self.field, _local_params=local_params,
             _instance_mapper=self.instance_mapper, **self.kwargs)
         return query
 
