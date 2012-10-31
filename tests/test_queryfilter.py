@@ -8,7 +8,7 @@ from mock import patch
 from solar import X
 from solar.searcher import SolrSearcher
 from solar.queryfilter import (
-    QueryFilter, FacetFilter, FacetFilterValue,
+    QueryFilter, Filter, FacetFilter, FacetFilterValue,
     FacetQueryFilter, FacetQueryFilterValue, RangeFilter,
     OrderingFilter, OrderingValue)
 
@@ -54,6 +54,7 @@ class QueryTest(TestCase):
                 CategoryFilter(
                     'cat', 'category', mincount=1,
                     _local_params={'cache': 'false'}))
+            qf.add_filter(Filter('country', select_multiple=False))
             qf.add_filter(
                 FacetQueryFilter(
                     'date_created',
@@ -76,6 +77,7 @@ class QueryTest(TestCase):
 
             params = {
                 'cat': ['5', '13'],
+                'country': ['us', 'ru'],
                 'date_created': ['today'],
                 'price__gte': ['100'],
                 'price__lte': ['200'],
@@ -92,6 +94,7 @@ class QueryTest(TestCase):
             # self.assertTrue('stats=true' in raw_query)
             # self.assertTrue('stats.field=price' in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=cat}(category:"5" OR category:"13")') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!tag=country}country:"ru"') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=price}price:[100 TO *] AND price:[* TO 200]') in raw_query)
             self.assertTrue('sort=%s' % quote_plus('price desc') in raw_query)

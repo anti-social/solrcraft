@@ -131,9 +131,10 @@ class Filter(BaseFilter):
                                     _local_params={'tag': self.name})
             else:
                 local_params = LocalParams({'tag': self.name})
-                local_params.update(fqs[-1][1])
-                return query.filter(fqs[-1][0],
-                                    _local_params=local_params)
+                x, lp = fqs[-1]
+                if lp:
+                    local_params.update(lp)
+                return query.filter(x, _local_params=local_params)
         return query
 
     def _make_x(self, op, v):
