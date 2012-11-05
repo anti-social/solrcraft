@@ -109,8 +109,7 @@ class BaseFilter(object):
                 op = '__'.join(ops[1:])
             if name == self.name:
                 for w in v:
-                    items.append((op, w))
-        return items
+                    yield (op, w)
 
     def process_results(self, results, params):
         raise NotImplementedError()
@@ -118,23 +117,25 @@ class BaseFilter(object):
 class Filter(BaseFilter):
     fq_connector = X.OR
 
-    def __init__(self, name, field=None, select_multiple=True):
+    def __init__(self, name, field=None, select_multiple=True, default=None, **kwargs):
         super(Filter, self).__init__(name)
         self.field = field or self.name
         self.select_multiple = select_multiple
-
+        self.default = default
     
     def _filter_query(self, query, fqs):
         if fqs:
             if self.select_multiple:
-                return query.filter(*[fq[0] for fq in fqs], _op=self.fq_connector,
+                return query.filter(*[x for x, lp in fqs if x],
+                                     _op=self.fq_connector,
                                     _local_params={'tag': self.name})
             else:
                 local_params = LocalParams({'tag': self.name})
                 x, lp = fqs[-1]
                 if lp:
                     local_params.update(lp)
-                return query.filter(x, _local_params=local_params)
+                if x:
+                    return query.filter(x, _local_params=local_params)
         return query
 
     def _make_x(self, op, v):
@@ -145,9 +146,9 @@ class Filter(BaseFilter):
     def apply(self, query, params):
         fqs = []
         for op, v in self._filter_and_split_params(params):
-            x, local_params = self._make_x(op, v)
-            # if x:
-            fqs.append((x, local_params))
+            fqs.append(self._make_x(op, v))
+        if not fqs and self.default:
+            fqs.append(self._make_x('exact', self.default))
         return self._filter_query(query, fqs)
 
     def process_results(self, results, params):
@@ -190,7 +191,7 @@ class FacetFilter(Filter):
     def __init__(self, name, field=None, filter_value_cls=None,
                  _local_params=None, _instance_mapper=None,
                  select_multiple=True, **kwargs):
-        super(FacetFilter, self).__init__(name, field=field,
+        super(FacetFilter, self).__init__(name, field,
                                           select_multiple=select_multiple)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(_local_params)
@@ -262,7 +263,7 @@ class FacetQueryFilterValue(object):
 
 class FacetQueryFilter(Filter):
     def __init__(self, name, *args, **kwargs):
-        super(FacetQueryFilter, self).__init__(name, kwargs.get('select_multiple'))
+        super(FacetQueryFilter, self).__init__(name, **kwargs)
         self.filter_values = args
         for fv in self.filter_values:
             fv.filter_name = self.name
@@ -300,11 +301,16 @@ class FacetQueryFilter(Filter):
         return query
 
     def process_results(self, results, params):
+        was_selected = False
         for filter_value in self.filter_values:
             for facet_query in results.facet_queries:
                 if facet_query.local_params.get('key') == filter_value._key:
                     filter_value.facet_query = facet_query
-                    filter_value.selected = filter_value.value in params.get(self.name, [])
+                    if filter_value.value in params.get(self.name, []):
+                        filter_value.selected = True
+                        was_selected = True
+        if not was_selected and self.default:
+            self.get_value(self.default).selected = True
 
 class RangeFilter(Filter):
     fq_connector = X.AND
