@@ -5,6 +5,11 @@ import logging
 from copy import deepcopy
 from datetime import datetime, date
 
+try:
+    from collections import OrderedDict
+except ImportError:
+    from ordereddict import OrderedDict
+
 from .tree import Node
 
 
@@ -90,50 +95,53 @@ class X(Node):
         obj.negate()
         return obj
 
-class LocalParams(object):
-    def __init__(self, params=None):
-        self.local_params = []
-        self.keys = set()
-
-        params = params or []
-        if isinstance(params, dict):
-            params = sorted(params.items(), key=lambda p: p[0])
-            
-        for p in params:
-            self.add(p)
-
+class LocalParams(OrderedDict):
+    def update(self, other=None, **kwargs):
+        if other is None:
+            other = OrderedDict()
+        elif isinstance(other, LocalParams):
+            other = OrderedDict(other)
+        elif hasattr(other, 'keys'):
+            other = OrderedDict((k, other[k]) for k in sorted(other.keys()))
+        elif hasattr(other, '__iter__'):
+            _other = []
+            for p in other:
+                if isinstance(p, (list, tuple)):
+                    _other.append(p)
+                else:
+                    _other.append(('type', p))
+            other = OrderedDict(_other)
+        else:
+            other = OrderedDict(type=other)
+        other.update(sorted(kwargs.items(), key=lambda p: p[0]))
+        super(LocalParams, self).update(other)
+    # replace OrderedDict.__update to fix lp.update(['dismax'])
+    _OrderedDict__update = update
+    
     def add(self, key, value=None):
-        if value is None and isinstance(key, (list, tuple)):
-            key, value = key
-        self.local_params.append((key, value))
-        self.keys.add(key)
+        if value is None:
+            if isinstance(key, (list, tuple)):
+                key, value = key
+            else:
+                key, value = 'type', key
+        self[key] = value
 
-    def get(self, key, default=None):
-        for k, v in self.local_params:
-            if k == key:
-                return v
-        return default
-
-    def update(self, local_params):
-        for k, v in local_params:
-            self.add(k, v)
-        
-    def __contains__(self, key):
-        return key in self.keys
-
-    def __iter__(self):
-        return iter(self.local_params)
-            
+    def _quote(self, value):
+        value = str(value)
+        if " " in value:
+            return "'%s'" % value
+        return value
+    
     def __str__(self):
-        if not self.local_params:
+        if not self:
             return ''
 
         parts = []
-        for key, value in self.local_params:
-            if value is None:
-                parts.append(key)
+        for key, value in self.items():
+            if key == 'type':
+                parts.append(self._quote(value))
             else:
-                parts.append('%s=%s' % (key, value))
+                parts.append('%s=%s' % (key, self._quote(value)))
         return '{!%s}' % ' '.join(parts)
 
 def process_value(v):

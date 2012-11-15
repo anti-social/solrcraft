@@ -220,8 +220,8 @@ class FacetFilter(Filter):
 
     def apply(self, query, params):
         query = super(FacetFilter, self).apply(query, params)
-        local_params = LocalParams({'ex': self.name})
-        local_params.update(self.local_params)
+        local_params = LocalParams(self.local_params)
+        local_params['ex'] = self.name
         query = query.facet_field(
             self.field, _local_params=local_params,
             _instance_mapper=self.instance_mapper, **self.kwargs)
@@ -293,8 +293,9 @@ class FacetQueryFilter(Filter):
     def apply(self, query, params):
         query = super(FacetQueryFilter, self).apply(query, params)
         for filter_value in self.filter_values:
-            local_params = LocalParams({'key': filter_value._key, 'ex': self.name})
-            local_params.update(filter_value.local_params)
+            local_params = LocalParams(filter_value.local_params)
+            local_params['key'] = filter_value._key
+            local_params['ex'] = self.name
             query = query.facet_query(
                 filter_value.fq,
                 _local_params=local_params)

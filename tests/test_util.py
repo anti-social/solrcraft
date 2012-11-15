@@ -2,7 +2,8 @@
 from datetime import datetime
 from unittest import TestCase
 
-from solar.util import SafeUnicode, safe_solr_input, X, make_fq
+from solar import func
+from solar.util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq
 
 class UtilTest(TestCase):
     def test_safe_solr_input(self):
@@ -67,7 +68,35 @@ class UtilTest(TestCase):
                          u"status:0 OR status:1")
         self.assertEqual(make_fq(X(status=SafeUnicode(u'"0"'))),
                          u'status:"0"')
-        
+
+    def test_local_params(self):
+        self.assertEqual(str(LocalParams({'cache': 'false'})),
+                         '{!cache=false}')
+        self.assertEqual(str(LocalParams(LocalParams({'cache': 'false'}))),
+                         '{!cache=false}')
+        self.assertEqual(str(LocalParams({'ex': 'tag'}, key='tag')),
+                         '{!ex=tag key=tag}')
+        self.assertEqual(str(LocalParams({'ex': 'tag', 'key': 'tag'}, key='category')),
+                         '{!ex=tag key=category}')
+        self.assertEqual(str(LocalParams('frange', l=0, u=5)),
+                         '{!frange l=0 u=5}')
+        self.assertEqual(str(LocalParams(['geofilt', ('d', 10), ('key', 'd10')])),
+                         '{!geofilt d=10 key=d10}')
+        self.assertEqual(str(LocalParams()), '')
+        self.assertEqual(str(LocalParams(None)), '')
+
+        lp = LocalParams('dismax', bf=func.linear('rank', 100, 0), v='$q1')
+        lp.update(LocalParams(qf='name^10 description'))
+        lp.add('pf', 'name')
+        lp.add('ps', 2)
+        self.assertTrue('type' in lp)
+        self.assertTrue('v' in lp)
+        self.assertFalse('q' in lp)
+        self.assertEqual(lp['type'], 'dismax')
+        self.assertEqual(
+            str(lp),
+            "{!dismax bf=linear(rank,100,0) v=$q1 qf='name^10 description' pf=name ps=2}")
+    
                  
 if __name__ == '__main__':
     from unittest import main
