@@ -130,11 +130,10 @@ class Filter(BaseFilter):
                                      _op=self.fq_connector,
                                     _local_params={'tag': self.name})
             else:
-                local_params = LocalParams({'tag': self.name})
                 x, lp = fqs[-1]
-                if lp:
-                    local_params.update(lp)
-                if x:
+                local_params = LocalParams(lp)
+                if x or local_params:
+                    local_params['tag'] = self.name
                     return query.filter(x, _local_params=local_params)
         return query
 
