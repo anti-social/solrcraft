@@ -127,7 +127,7 @@ class LocalParams(OrderedDict):
         self[key] = value
 
     def _quote(self, value):
-        value = str(value)
+        value = unicode(value)
         if " " in value:
             return "'%s'" % value
         return value
@@ -139,9 +139,10 @@ class LocalParams(OrderedDict):
         parts = []
         for key, value in self.items():
             if key == 'type':
-                parts.append(self._quote(value))
+                parts.append(safe_solr_input(self._quote(value)))
             else:
-                parts.append('%s=%s' % (key, self._quote(value)))
+                parts.append('%s=%s' % (safe_solr_input(key),
+                                        self._quote(safe_solr_input(value))))
         return '{!%s}' % ' '.join(parts)
 
 def process_value(v):
@@ -149,6 +150,8 @@ def process_value(v):
         return '1'
     if v is False:
         return '0'
+    if isinstance(v, LocalParams):
+        return '"%s"' % unicode(v)
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
     if isinstance(v, basestring) and SOLR_DATETIME_RE.match(v):

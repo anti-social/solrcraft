@@ -85,6 +85,9 @@ class UtilTest(TestCase):
         self.assertEqual(str(LocalParams()), '')
         self.assertEqual(str(LocalParams(None)), '')
 
+        self.assertEqual(str(LocalParams('dismax', v='OR test')),
+                         '{!dismax v=\'or test\'}')
+        
         lp = LocalParams('dismax', bf=func.linear('rank', 100, 0), v='$q1')
         lp.update(LocalParams(qf='name^10 description'))
         lp.add('pf', 'name')
@@ -95,7 +98,7 @@ class UtilTest(TestCase):
         self.assertEqual(lp['type'], 'dismax')
         self.assertEqual(
             str(lp),
-            "{!dismax bf=linear(rank,100,0) v=$q1 qf='name^10 description' pf=name ps=2}")
+            "{!dismax bf=linear\\(rank,100,0\\) v=$q1 qf='name\\^10 description' pf=name ps=2}")
     
                  
 if __name__ == '__main__':

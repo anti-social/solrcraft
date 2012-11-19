@@ -6,7 +6,7 @@ from unittest import TestCase
 from mock import patch
 
 from solar.searcher import SolrSearcher
-from solar.util import X, make_fq
+from solar.util import X, LocalParams, make_fq
 from solar import func
 
 
@@ -28,7 +28,7 @@ class QueryTest(TestCase):
             SolrSearcher().search(X(name='test') | X(name__startswith='test'))
             .dismax()
             .qf([('name', 10), ('keywords', 2)])
-            .bf((func.linear('rank',1,0) ^ 100) + func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
+            .bf((func.linear('rank', 1, 0) ^ 100) + func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
             .field_weight('name', 5)
         )
         raw_query = str(q)
@@ -37,6 +37,20 @@ class QueryTest(TestCase):
         self.assertTrue('qf=%s' % quote_plus('name^5 keywords^2') in raw_query)
         self.assertTrue('bf=%s' % quote_plus('linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)') in raw_query)
         # self.assertFalse('defType=dismax' in raw_query)
+
+        q = (
+            SolrSearcher()
+            .search(
+                X(_query_=LocalParams('dismax', bf=func.linear('rank', 100, 0),
+                                      qf='name^10', v=u'nokia'))
+                & X(_query_=LocalParams('dismax', bf=func.linear('rank', 100, 0),
+                                        qf='description', v=u'nokia lumia AND')))
+        )
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus(
+                '(_query_:"{!dismax bf=linear\\(rank,100,0\\) qf=name\\^10 v=nokia}" '
+                'AND _query_:"{!dismax bf=linear\\(rank,100,0\\) qf=description v=\'nokia lumia and\'}")') in raw_query)
     
     def test_filter(self):
         q = SolrSearcher().search()
