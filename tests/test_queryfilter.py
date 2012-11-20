@@ -96,7 +96,7 @@ class QueryTest(TestCase):
                 'country': ['us', 'ru'],
                 'date_created': ['today'],
                 'price__gte': ['100'],
-                'price__lte': ['200'],
+                'price__lte': ['200', 'nan'],
                 'dist': ['d10'],
                 'sort': ['-price'],
                 }
@@ -161,8 +161,8 @@ class QueryTest(TestCase):
                 self.assertEqual(category_filter.all_values[4].selected, True)
 
                 price_filter = qf.get_filter('price')
-                self.assertEqual(price_filter.from_value, '100')
-                self.assertEqual(price_filter.to_value, '200')
+                self.assertEqual(price_filter.from_value, 100)
+                self.assertEqual(price_filter.to_value, 200)
                 self.assertEqual(price_filter.min, 3.5)
                 self.assertEqual(price_filter.max, 892.0)
 

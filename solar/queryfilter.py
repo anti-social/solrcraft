@@ -94,8 +94,9 @@ class QueryFilter(object):
 
 class BaseFilter(object):
 
-    def __init__(self, name):
+    def __init__(self, name, coerce=None):
         self.name = name
+        self.coerce = coerce
 
     def _filter_and_split_params(self, params):
         """Returns [(operator1, value1), (operator2, value2)]"""
@@ -109,7 +110,12 @@ class BaseFilter(object):
                 op = '__'.join(ops[1:])
             if name == self.name:
                 for w in v:
-                    yield (op, w)
+                    if self.coerce:
+                        try:
+                            w = self.coerce(w)
+                        except ValueError:
+                            continue
+                    yield op, w
 
     def process_results(self, results, params):
         raise NotImplementedError()
@@ -117,8 +123,9 @@ class BaseFilter(object):
 class Filter(BaseFilter):
     fq_connector = X.OR
 
-    def __init__(self, name, field=None, select_multiple=True, default=None, **kwargs):
-        super(Filter, self).__init__(name)
+    def __init__(self, name, field=None, coerce=None,
+                 select_multiple=True, default=None, **kwargs):
+        super(Filter, self).__init__(name, coerce=coerce)
         self.field = field or self.name
         self.select_multiple = select_multiple
         self.default = default
@@ -315,8 +322,9 @@ class FacetQueryFilter(Filter):
 class RangeFilter(Filter):
     fq_connector = X.AND
     
-    def __init__(self, name, field=None, gather_stats=False):
-        super(RangeFilter, self).__init__(name, field)
+    def __init__(self, name, field=None,
+                 gather_stats=False, coerce=int):
+        super(RangeFilter, self).__init__(name, field, coerce=coerce)
         self.gather_stats = gather_stats
         self.from_value = None
         self.to_value = None
