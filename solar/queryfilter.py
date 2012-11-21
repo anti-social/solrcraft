@@ -228,6 +228,7 @@ class FacetFilter(Filter):
         query = super(FacetFilter, self).apply(query, params)
         local_params = LocalParams(self.local_params)
         local_params['ex'] = self.name
+        local_params['key'] = self.name
         query = query.facet_field(
             self.field, _local_params=local_params,
             _instance_mapper=self.instance_mapper, **self.kwargs)
@@ -239,7 +240,7 @@ class FacetFilter(Filter):
         self.selected_values = []
         selected_values = set(params.get(self.name, []))
         for facet in results.facet_fields:
-            if facet.local_params.get('ex') == self.name:
+            if facet.local_params.get('key') == self.name:
                 for fv in facet.values:
                     selected = fv.value in selected_values
                     self.add_value(self.filter_value_cls(self.name, fv, selected))

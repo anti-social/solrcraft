@@ -41,7 +41,7 @@ class QueryTest(TestCase):
       "dist__d10":12,
       "dist__d20":40},
     "facet_fields":{
-      "category":[
+      "cat":[
         "100",500,
         "5",10,
         "2",5,
@@ -105,7 +105,7 @@ class QueryTest(TestCase):
             raw_query = str(q)
 
             self.assertTrue('facet=true' in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!cache=false ex=cat}category') in raw_query)
+            self.assertTrue('facet.field=%s' % quote_plus('{!cache=false ex=cat key=cat}category') in raw_query)
             self.assertTrue('facet.query=%s' % quote_plus('{!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
             self.assertTrue('facet.query=%s' % quote_plus('{!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]') in raw_query)
             self.assertTrue('facet.query=%s' % quote_plus('{!geofilt d=5 key=dist__d5 ex=dist}') in raw_query)
