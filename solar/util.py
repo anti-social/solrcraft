@@ -30,15 +30,21 @@ class SafeString(str):
 class SafeUnicode(unicode):
     pass
 
-def process_special_words(value):
-    for w in SPECIAL_WORDS:
+def process_special_words(value, words=None):
+    words = words or SPECIAL_WORDS
+    for w in words:
         value = re.sub(r'(\A|\s+)(%s)(\s+|\Z)' % w, lambda m: m.group(0).lower(), value)
     return value
 
-def process_special_characters(value):
-    for c in SPECIAL_CHARACTERS:
+def process_special_characters(value, chars=None):
+    chars = chars or SPECIAL_CHARACTERS
+    for c in chars:
         value = value.replace(c, r'\%s' % c)
     return value
+
+def contains_special_characters(value, chars=None):
+    chars = chars or SPECIAL_CHARACTERS
+    return any(map(lambda c: c in value, chars))
 
 def safe_solr_input(value):
     if isinstance(value, (SafeString, SafeUnicode)):
@@ -104,6 +110,8 @@ class X(Node):
         return obj
 
 class LocalParams(OrderedDict):
+    SPECIAL_CHARACTERS = " '" + SPECIAL_CHARACTERS
+    
     def update(self, other=None, **kwargs):
         if other is None:
             other = OrderedDict()
@@ -121,8 +129,10 @@ class LocalParams(OrderedDict):
             other = OrderedDict(_other)
         else:
             other = OrderedDict(type=other)
+        
         other.update(sorted(kwargs.items(), key=lambda p: p[0]))
-        super(LocalParams, self).update(other)
+        for k, v in other.items():
+            self.add(k, v)
     # replace OrderedDict.__update to fix lp.update(['dismax'])
     _OrderedDict__update = update
     
@@ -132,12 +142,18 @@ class LocalParams(OrderedDict):
                 key, value = key
             else:
                 key, value = 'type', key
+        
+        if contains_special_characters(key, self.SPECIAL_CHARACTERS):
+            raise ValueError("Key '%s' contents special characters" % key)
+        if key == 'type' and contains_special_characters(value, self.SPECIAL_CHARACTERS):
+            raise ValueError("Type value '%s' contents special characters" % value)
+        
         self[key] = value
 
     def _quote(self, value):
         value = unicode(value)
         value = process_special_words(value)
-        if any(map(lambda c: c in value, " '" + SPECIAL_CHARACTERS)):
+        if contains_special_characters(value, self.SPECIAL_CHARACTERS):
             return "'%s'" % value.replace("'", "\\\\'").replace('"', '\\"')
         return value
     

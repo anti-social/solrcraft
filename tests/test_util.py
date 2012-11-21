@@ -91,6 +91,8 @@ class UtilTest(TestCase):
                          """{!dismax v='\\"test\\"'}""")
         self.assertEqual(str(LocalParams('dismax', v='test\'')),
                          """{!dismax v='test\\\\\''}""")
+        self.assertRaises(ValueError, LocalParams, '{dismax}', v='test')
+        self.assertRaises(ValueError, LocalParams, ['dismax', ('!v', 'test')])
         
         lp = LocalParams('dismax', bf=func.linear('rank', 100, 0), v='$q1')
         lp.update(LocalParams(qf='name^10 description'))
