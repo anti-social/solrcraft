@@ -56,7 +56,7 @@ class QueryTest(TestCase):
             qf.add_filter(
                 CategoryFilter(
                     'cat', 'category', mincount=1,
-                    _local_params={'cache': 'false'}))
+                    _local_params={'cache': False}))
             qf.add_filter(Filter('country', select_multiple=False))
             qf.add_filter(
                 FacetQueryFilter(
@@ -71,7 +71,7 @@ class QueryTest(TestCase):
                         X(date_created__gte='NOW/DAY-7DAY'),
                         title='Week ago')))
             qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True,
-                                      _local_params=LocalParams(cache='false')))
+                                      _local_params=LocalParams(cache=False)))
             qf.add_filter(
                 FacetQueryFilter(
                     'dist',

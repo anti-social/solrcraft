@@ -66,7 +66,7 @@ class QueryTest(TestCase):
             [u"(status:0 OR company_status:0)"])
         self.assertSequenceEqual(
             q.filter(with_photo=True)._prepare_params()['fq'],
-            [u"with_photo:1"])
+            [u"with_photo:true"])
         self.assertSequenceEqual(
             q.filter(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))._prepare_params()['fq'],
             [u"date_created:{2012-05-17T14:35:41Z TO *}"])
@@ -77,7 +77,7 @@ class QueryTest(TestCase):
             q.filter(X(price__gte=100), X(price__lte=1000))._prepare_params()['fq'],
             [u"price:[100 TO *] AND price:[* TO 1000]"])
         self.assertSequenceEqual(
-            q.filter(price__between=[500, 1000], _local_params=[('cache', 'false'), ('cost', 50)]) \
+            q.filter(price__between=[500, 1000], _local_params=[('cache', False), ('cost', 50)]) \
                 ._prepare_params()['fq'],
             [u"{!cache=false cost=50}price:[500 TO 1000]"])
         self.assertSequenceEqual(
@@ -171,7 +171,7 @@ class QueryTest(TestCase):
                               _instance_mapper=category_mapper)
             q = q.facet_field('tag', _local_params={'ex': 'tag'})
             q = q.facet_query(price__lte=100,
-                              _local_params=[('ex', 'price'), ('cache', 'false')])
+                              _local_params=[('ex', 'price'), ('cache', False)])
             q = q.group('company', limit=3)
             q = q.filter(category=13, _local_params={'tag': 'category'})
             q = q.stats('price')

@@ -139,17 +139,17 @@ class LocalParams(OrderedDict):
         parts = []
         for key, value in self.items():
             if key == 'type':
-                parts.append(safe_solr_input(self._quote(value)))
+                parts.append(process_value(value))
             else:
-                parts.append('%s=%s' % (safe_solr_input(key),
-                                        self._quote(safe_solr_input(value))))
+                parts.append('%s=%s' % (process_value(key),
+                                        self._quote(process_value(value))))
         return '{!%s}' % ' '.join(parts)
 
 def process_value(v):
     if v is True:
-        return '1'
+        return 'true'
     if v is False:
-        return '0'
+        return 'false'
     if isinstance(v, LocalParams):
         return '"%s"' % unicode(v)
     if isinstance(v, (datetime, date)):

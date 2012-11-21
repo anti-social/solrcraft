@@ -47,7 +47,7 @@ class UtilTest(TestCase):
         self.assertEqual(make_fq(X(manufacturer__exact='Chuck Norris')),
                          u'manufacturer:"Chuck Norris"')
         self.assertEqual(make_fq(X(with_photo=True)),
-                         u"with_photo:1")
+                         u"with_photo:true")
         self.assertEqual(make_fq(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
                          u"date_created:{2012-05-17T14:35:41Z TO *}")
         self.assertEqual(make_fq(X(price__lt=1000)),
@@ -70,9 +70,9 @@ class UtilTest(TestCase):
                          u'status:"0"')
 
     def test_local_params(self):
-        self.assertEqual(str(LocalParams({'cache': 'false'})),
+        self.assertEqual(str(LocalParams({'cache': False})),
                          '{!cache=false}')
-        self.assertEqual(str(LocalParams(LocalParams({'cache': 'false'}))),
+        self.assertEqual(str(LocalParams(LocalParams({'cache': False}))),
                          '{!cache=false}')
         self.assertEqual(str(LocalParams({'ex': 'tag'}, key='tag')),
                          '{!ex=tag key=tag}')
