@@ -6,7 +6,7 @@ from unittest import TestCase
 from mock import patch
 
 from solar.searcher import SolrSearcher
-from solar.util import X, LocalParams, make_fq
+from solar.util import SafeUnicode, X, LocalParams, make_fq
 from solar import func
 
 
@@ -37,6 +37,16 @@ class QueryTest(TestCase):
         self.assertTrue('qf=%s' % quote_plus('name^5 keywords^2') in raw_query)
         self.assertTrue('bf=%s' % quote_plus('linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)') in raw_query)
         # self.assertFalse('defType=dismax' in raw_query)
+
+        q = (
+            SolrSearcher()
+            .search(LocalParams('dismax', bf=func.linear('rank', 100, 0),
+                                qf='name', v=X(SafeUnicode(u'"nokia lumia"')) | X(SafeUnicode(u'"nokia n900"'))))
+        )
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus(
+                """{!dismax bf='linear(rank,100,0)' qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}""") in raw_query)
 
         q = (
             SolrSearcher()

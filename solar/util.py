@@ -150,9 +150,10 @@ class LocalParams(OrderedDict):
         
         self[key] = value
 
-    def _quote(self, value):
+    def _quote(self, value, replace_words=True):
         value = unicode(value)
-        value = process_special_words(value)
+        if replace_words:
+            value = process_special_words(value)
         if contains_special_characters(value, self.SPECIAL_CHARACTERS):
             return "'%s'" % value.replace("'", "\\\\'").replace('"', '\\"')
         return value
@@ -166,10 +167,15 @@ class LocalParams(OrderedDict):
             if key == 'type':
                 parts.append(value)
             else:
+                replace_words = True
+                if isinstance(value, X):
+                    value = make_fq(value)
+                    replace_words = False
                 parts.append(
                     '%s=%s' % (
                         key,
-                        self._quote(process_value(value, safe=True))))
+                        self._quote(process_value(value, safe=True),
+                                    replace_words=replace_words)))
         return '{!%s}' % ' '.join(parts)
 
 def process_value(v, safe=False):
@@ -230,7 +236,9 @@ def make_fq(x, local_params=None):
         for child in x.children:
             if child is None:
                 continue
-            if isinstance(child, tuple):
+            if isinstance(child, LocalParams):
+                parts = [unicode(child)]
+            elif isinstance(child, tuple):
                 parts = [fq_from_tuple(child)]
             elif isinstance(child, basestring):
                 parts = [safe_solr_input(child)]

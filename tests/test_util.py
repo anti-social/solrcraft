@@ -68,6 +68,8 @@ class UtilTest(TestCase):
                          u"status:0 OR status:1")
         self.assertEqual(make_fq(X(status=SafeUnicode(u'"0"'))),
                          u'status:"0"')
+        self.assertEqual(make_fq(X(LocalParams('dismax', qf='name', v=X(u'nokia lumia')))),
+                         u"{!dismax qf=name v='nokia lumia'}")
 
     def test_local_params(self):
         self.assertEqual(str(LocalParams({'cache': False})),
@@ -94,6 +96,11 @@ class UtilTest(TestCase):
         self.assertRaises(ValueError, LocalParams, '{dismax}', v='test')
         self.assertRaises(ValueError, LocalParams, ['dismax', ('!v', 'test')])
         
+        self.assertEqual(
+            str(LocalParams('dismax', qf='name',
+                            v=X(SafeUnicode(u'"nokia lumia"')) | X(SafeUnicode(u'"nokia n900"')))),
+            """{!dismax qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}""")
+
         lp = LocalParams('dismax', bf=func.linear('rank', 100, 0), v='$q1')
         lp.update(LocalParams(qf='name^10 description'))
         lp.add('pf', 'name')
