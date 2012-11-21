@@ -70,7 +70,8 @@ class QueryTest(TestCase):
                         'week_ago',
                         X(date_created__gte='NOW/DAY-7DAY'),
                         title='Week ago')))
-            qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True))
+            qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True,
+                                      _local_params=LocalParams(cache='false')))
             qf.add_filter(
                 FacetQueryFilter(
                     'dist',
@@ -113,10 +114,10 @@ class QueryTest(TestCase):
             self.assertTrue('facet.query=%s' % quote_plus('{!geofilt d=20 key=dist__d20 ex=dist}') in raw_query)
             # self.assertTrue('stats=true' in raw_query)
             # self.assertTrue('stats.field=price_unit' in raw_query)
-            self.assertTrue('fq=%s' % quote_plus('{!tag=cat}(category:"5" OR category:"13")') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!cache=false tag=cat}(category:"5" OR category:"13")') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=country}country:"ru"') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
-            self.assertTrue('fq=%s' % quote_plus('{!tag=price}price_unit:[100 TO *] AND price_unit:[* TO 200]') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!cache=false tag=price}price_unit:[100 TO *] AND price_unit:[* TO 200]') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!geofilt d=10 tag=dist}') in raw_query)
             self.assertTrue('sort=%s' % quote_plus('price desc') in raw_query)
 

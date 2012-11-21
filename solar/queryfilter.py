@@ -123,19 +123,22 @@ class BaseFilter(object):
 class Filter(BaseFilter):
     fq_connector = X.OR
 
-    def __init__(self, name, field=None, coerce=None,
+    def __init__(self, name, field=None, coerce=None, _local_params=None,
                  select_multiple=True, default=None, **kwargs):
         super(Filter, self).__init__(name, coerce=coerce)
         self.field = field or self.name
+        self.local_params = LocalParams(_local_params)
         self.select_multiple = select_multiple
         self.default = default
     
     def _filter_query(self, query, fqs):
         if fqs:
             if self.select_multiple:
+                local_params = LocalParams(self.local_params)
+                local_params['tag'] = self.name
                 return query.filter(*[x for x, lp in fqs if x],
                                      _op=self.fq_connector,
-                                    _local_params={'tag': self.name})
+                                    _local_params=local_params)
             else:
                 x, lp = fqs[-1]
                 local_params = LocalParams(lp)
@@ -147,7 +150,7 @@ class Filter(BaseFilter):
     def _make_x(self, op, v):
         op_func = OPERATORS.get(op)
         if op_func:
-            return op_func(self.field, v), None
+            return op_func(self.field, v), self.local_params
         
     def apply(self, query, params):
         fqs = []
@@ -323,9 +326,9 @@ class FacetQueryFilter(Filter):
 class RangeFilter(Filter):
     fq_connector = X.AND
     
-    def __init__(self, name, field=None,
-                 gather_stats=False, coerce=int):
-        super(RangeFilter, self).__init__(name, field, coerce=coerce)
+    def __init__(self, name, field=None, coerce=int,
+                 gather_stats=False, **kwargs):
+        super(RangeFilter, self).__init__(name, field, coerce=coerce, **kwargs)
         self.gather_stats = gather_stats
         self.from_value = None
         self.to_value = None
