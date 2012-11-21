@@ -49,8 +49,8 @@ class QueryTest(TestCase):
         raw_query = str(q)
 
         self.assertTrue('q=%s' % quote_plus(
-                '(_query_:"{!dismax bf=linear\\(rank,100,0\\) qf=name\\^10 v=nokia}" '
-                'AND _query_:"{!dismax bf=linear\\(rank,100,0\\) qf=description v=\'nokia lumia and\'}")') in raw_query)
+                '(_query_:"{!dismax bf=\'linear(rank,100,0)\' qf=\'name^10\' v=nokia}" '
+                'AND _query_:"{!dismax bf=\'linear(rank,100,0)\' qf=description v=\'nokia lumia and\'}")') in raw_query)
     
     def test_filter(self):
         q = SolrSearcher().search()

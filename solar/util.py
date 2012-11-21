@@ -30,6 +30,16 @@ class SafeString(str):
 class SafeUnicode(unicode):
     pass
 
+def process_special_words(value):
+    for w in SPECIAL_WORDS:
+        value = re.sub(r'(\A|\s+)(%s)(\s+|\Z)' % w, lambda m: m.group(0).lower(), value)
+    return value
+
+def process_special_characters(value):
+    for c in SPECIAL_CHARACTERS:
+        value = value.replace(c, r'\%s' % c)
+    return value
+
 def safe_solr_input(value):
     if isinstance(value, (SafeString, SafeUnicode)):
         return value
@@ -37,11 +47,9 @@ def safe_solr_input(value):
     if not isinstance(value, basestring):
         value = unicode(value)
     
-    for w in SPECIAL_WORDS:
-        value = re.sub(r'(\A|\s+)(%s)(\s+|\Z)' % w, lambda m: m.group(0).lower(), value)
+    value = process_special_words(value)
 
-    for c in SPECIAL_CHARACTERS:
-        value = value.replace(c, r'\%s' % c)
+    value = process_special_characters(value)
 
     if isinstance(value, unicode):
         return SafeUnicode(value)
@@ -128,8 +136,9 @@ class LocalParams(OrderedDict):
 
     def _quote(self, value):
         value = unicode(value)
-        if " " in value:
-            return "'%s'" % value
+        value = process_special_words(value)
+        if any(map(lambda c: c in value, " '" + SPECIAL_CHARACTERS)):
+            return "'%s'" % value.replace("'", "\\\\'").replace('"', '\\"')
         return value
     
     def __str__(self):
@@ -139,13 +148,15 @@ class LocalParams(OrderedDict):
         parts = []
         for key, value in self.items():
             if key == 'type':
-                parts.append(process_value(value))
+                parts.append(value)
             else:
-                parts.append('%s=%s' % (process_value(key),
-                                        self._quote(process_value(value))))
+                parts.append(
+                    '%s=%s' % (
+                        key,
+                        self._quote(process_value(value, safe=True))))
         return '{!%s}' % ' '.join(parts)
 
-def process_value(v):
+def process_value(v, safe=False):
     if v is True:
         return 'true'
     if v is False:
@@ -156,6 +167,8 @@ def process_value(v):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
     if isinstance(v, basestring) and SOLR_DATETIME_RE.match(v):
         return v
+    if safe:
+        return unicode(v)
     return safe_solr_input(v)
 
 def process_field(field, op, value):
