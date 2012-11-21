@@ -1,6 +1,11 @@
 *.pyc
 *.py~
 
+### emacs ###
+*~
+\#*#
+.ropeproject/
+
 build/
 dist/
 *.egg-info/
