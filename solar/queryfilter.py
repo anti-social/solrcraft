@@ -136,9 +136,11 @@ class Filter(BaseFilter):
             if self.select_multiple:
                 local_params = LocalParams(self.local_params)
                 local_params['tag'] = self.name
-                return query.filter(*[x for x, lp in fqs if x],
-                                     _op=self.fq_connector,
-                                    _local_params=local_params)
+                xs = [x for x, lp in fqs if x]
+                if xs:
+                    return query.filter(*xs,
+                                         _op=self.fq_connector,
+                                         _local_params=local_params)
             else:
                 x, lp = fqs[-1]
                 local_params = LocalParams(lp)
@@ -151,6 +153,7 @@ class Filter(BaseFilter):
         op_func = OPERATORS.get(op)
         if op_func:
             return op_func(self.field, v), self.local_params
+        return None, None
         
     def apply(self, query, params):
         fqs = []
@@ -299,6 +302,7 @@ class FacetQueryFilter(Filter):
         for filter_value in self.filter_values:
             if filter_value.value == value:
                 return filter_value.fq, filter_value.local_params
+        return None, None
                            
     def apply(self, query, params):
         query = super(FacetQueryFilter, self).apply(query, params)
