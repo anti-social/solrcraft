@@ -17,7 +17,7 @@ def requires():
 
 setup(
     name = "solar",
-    version = "0.2.13",
+    version = "0.2.14",
     requires = requires(),
     author = "Alexander Koval",
     author_email = "kovalidis@gmail.com",
