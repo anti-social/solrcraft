@@ -16,14 +16,26 @@ class QueryTest(TestCase):
         raw_query = str(q)
 
         self.assertTrue('q=%s' % quote_plus('*:*') in raw_query)
-        self.assertFalse('defType=dismax' in raw_query)
+        self.assertTrue('defType=dismax' in raw_query)
 
         q = SolrSearcher().search('test query').dismax()
         raw_query = str(q)
 
         self.assertTrue('q=%s' % quote_plus('test query') in raw_query)
         self.assertTrue('defType=dismax' in raw_query)
-        
+
+        q = SolrSearcher().search(name='test').dismax()
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus('name:test') in raw_query)
+        self.assertTrue('defType=dismax' in raw_query)
+
+        q = SolrSearcher().search(name='test').edismax()
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus('name:test') in raw_query)
+        self.assertTrue('defType=edismax' in raw_query)
+
         q = (
             SolrSearcher().search(X(name='test') | X(name__startswith='test'))
             .dismax()
@@ -36,7 +48,7 @@ class QueryTest(TestCase):
         self.assertTrue('q=%s' % quote_plus('(name:test OR name:test*)') in raw_query)
         self.assertTrue('qf=%s' % quote_plus('name^5 keywords^2') in raw_query)
         self.assertTrue('bf=%s' % quote_plus('linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)') in raw_query)
-        # self.assertFalse('defType=dismax' in raw_query)
+        self.assertTrue('defType=dismax' in raw_query)
 
         q = (
             SolrSearcher()

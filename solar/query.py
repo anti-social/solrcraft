@@ -3,6 +3,7 @@ import sys
 from copy import copy, deepcopy
 import urllib
 import logging
+import warnings
 
 from pysolr import SolrError
 
@@ -143,8 +144,11 @@ class SolrQuery(object):
             params['fl'] = ('*', 'score')
 
         if params.get('defType') == 'dismax' \
-                and self._q is None or self._q_args or self._q_kwargs:
-            params.pop('defType', None)
+                and (self._q is None or isinstance(self._q, X) or self._q_args or self._q_kwargs):
+            # should we turn off dismax query parser in this cases?
+            # or maybe we should use q.alt parameter instead of q?
+            # params.pop('defType', None)
+            warnings.warn('DisMax query parser does not support q=*:* or q=field:text')
 
         for facet_field in self._facet_fields:
             params = merge_params(params, facet_field.get_params())
