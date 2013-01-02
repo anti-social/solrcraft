@@ -2,9 +2,18 @@
 from datetime import datetime
 from unittest import TestCase
 
-from solar.util import SafeUnicode, X, make_fq
+from solar import func
+from solar.util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq
+
 
 class UtilTest(TestCase):
+    def test_safe_solr_input(self):
+        self.assertEqual(safe_solr_input('SEPARATOR'), 'SEPARATOR')
+        self.assertEqual(safe_solr_input(' AND one OR two  OR'), ' and one or two  or')
+        self.assertEqual(safe_solr_input('AND OR NOT TO'), 'and or not to')
+        self.assertEqual(safe_solr_input('\\+-&|!(){}[]^"~*?:'),
+                         '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:')
+    
     def test_X(self):
         self.assertEqual(unicode(X(status=0)),
                          u"(AND: ('status', 0))")
@@ -36,8 +45,10 @@ class UtilTest(TestCase):
                          u"status:0 AND (company_status:0 OR company_status:6)")
         self.assertEqual(make_fq(X(status=0) | X(company_status=0)),
                          u"(status:0 OR company_status:0)")
+        self.assertEqual(make_fq(X(manufacturer__exact='Chuck Norris')),
+                         u'manufacturer:"Chuck Norris"')
         self.assertEqual(make_fq(X(with_photo=True)),
-                         u"with_photo:1")
+                         u"with_photo:true")
         self.assertEqual(make_fq(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
                          u"date_created:{2012-05-17T14:35:41Z TO *}")
         self.assertEqual(make_fq(X(price__lt=1000)),
@@ -56,7 +67,53 @@ class UtilTest(TestCase):
                          u"status\\:0 or status\\:1")
         self.assertEqual(make_fq(X(SafeUnicode(u"status:0 OR status:1"))),
                          u"status:0 OR status:1")
+        self.assertEqual(make_fq(X(status=SafeUnicode(u'"0"'))),
+                         u'status:"0"')
+        self.assertEqual(make_fq(X(LocalParams('dismax', qf='name', v=X(u'nokia lumia')))),
+                         u"{!dismax qf=name v='nokia lumia'}")
+
+    def test_local_params(self):
+        self.assertEqual(str(LocalParams({'cache': False})),
+                         '{!cache=false}')
+        self.assertEqual(str(LocalParams(LocalParams({'cache': False}))),
+                         '{!cache=false}')
+        self.assertEqual(str(LocalParams({'ex': 'tag'}, key='tag')),
+                         '{!ex=tag key=tag}')
+        self.assertEqual(str(LocalParams({'ex': 'tag', 'key': 'tag'}, key='category')),
+                         '{!ex=tag key=category}')
+        self.assertEqual(str(LocalParams('frange', l=0, u=5)),
+                         '{!frange l=0 u=5}')
+        self.assertEqual(str(LocalParams(['geofilt', ('d', 10), ('key', 'd10')])),
+                         '{!geofilt d=10 key=d10}')
+        self.assertEqual(str(LocalParams()), '')
+        self.assertEqual(str(LocalParams(None)), '')
+
+        self.assertEqual(str(LocalParams('dismax', v='OR test')),
+                         """{!dismax v='or test'}""")
+        self.assertEqual(str(LocalParams('dismax', v='"test"')),
+                         """{!dismax v='\\"test\\"'}""")
+        self.assertEqual(str(LocalParams('dismax', v='test\'')),
+                         """{!dismax v='test\\\\\''}""")
+        self.assertRaises(ValueError, LocalParams, '{dismax}', v='test')
+        self.assertRaises(ValueError, LocalParams, ['dismax', ('!v', 'test')])
         
+        self.assertEqual(
+            str(LocalParams('dismax', qf='name',
+                            v=X(SafeUnicode(u'"nokia lumia"')) | X(SafeUnicode(u'"nokia n900"')))),
+            """{!dismax qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}""")
+
+        lp = LocalParams('dismax', bf=func.linear('rank', 100, 0), v='$q1')
+        lp.update(LocalParams(qf='name^10 description'))
+        lp.add('pf', 'name')
+        lp.add('ps', 2)
+        self.assertTrue('type' in lp)
+        self.assertTrue('v' in lp)
+        self.assertFalse('q' in lp)
+        self.assertEqual(lp['type'], 'dismax')
+        self.assertEqual(
+            str(lp),
+            "{!dismax bf='linear(rank,100,0)' v=$q1 qf='name^10 description' pf=name ps=2}")
+    
                  
 if __name__ == '__main__':
     from unittest import main

@@ -6,7 +6,7 @@ from unittest import TestCase
 from mock import patch
 
 from solar.searcher import SolrSearcher
-from solar.util import X, make_fq
+from solar.util import SafeUnicode, X, LocalParams, make_fq
 from solar import func
 
 
@@ -16,19 +16,31 @@ class QueryTest(TestCase):
         raw_query = str(q)
 
         self.assertTrue('q=%s' % quote_plus('*:*') in raw_query)
-        self.assertFalse('defType=dismax' in raw_query)
+        self.assertTrue('defType=dismax' in raw_query)
 
         q = SolrSearcher().search('test query').dismax()
         raw_query = str(q)
 
         self.assertTrue('q=%s' % quote_plus('test query') in raw_query)
         self.assertTrue('defType=dismax' in raw_query)
-        
+
+        q = SolrSearcher().search(name='test').dismax()
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus('name:test') in raw_query)
+        self.assertTrue('defType=dismax' in raw_query)
+
+        q = SolrSearcher().search(name='test').edismax()
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus('name:test') in raw_query)
+        self.assertTrue('defType=edismax' in raw_query)
+
         q = (
             SolrSearcher().search(X(name='test') | X(name__startswith='test'))
             .dismax()
             .qf([('name', 10), ('keywords', 2)])
-            .bf((func.linear('rank',1,0) ^ 100) + func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
+            .bf((func.linear('rank', 1, 0) ^ 100) + func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
             .field_weight('name', 5)
         )
         raw_query = str(q)
@@ -36,7 +48,31 @@ class QueryTest(TestCase):
         self.assertTrue('q=%s' % quote_plus('(name:test OR name:test*)') in raw_query)
         self.assertTrue('qf=%s' % quote_plus('name^5 keywords^2') in raw_query)
         self.assertTrue('bf=%s' % quote_plus('linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)') in raw_query)
-        # self.assertFalse('defType=dismax' in raw_query)
+        self.assertTrue('defType=dismax' in raw_query)
+
+        q = (
+            SolrSearcher()
+            .search(LocalParams('dismax', bf=func.linear('rank', 100, 0),
+                                qf='name', v=X(SafeUnicode(u'"nokia lumia"')) | X(SafeUnicode(u'"nokia n900"'))))
+        )
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus(
+                """{!dismax bf='linear(rank,100,0)' qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}""") in raw_query)
+
+        q = (
+            SolrSearcher()
+            .search(
+                X(_query_=LocalParams('dismax', bf=func.linear('rank', 100, 0),
+                                      qf='name^10', v=u'nokia'))
+                & X(_query_=LocalParams('dismax', bf=func.linear('rank', 100, 0),
+                                        qf='description', v=u'nokia lumia AND')))
+        )
+        raw_query = str(q)
+
+        self.assertTrue('q=%s' % quote_plus(
+                '(_query_:"{!dismax bf=\'linear(rank,100,0)\' qf=\'name^10\' v=nokia}" '
+                'AND _query_:"{!dismax bf=\'linear(rank,100,0)\' qf=description v=\'nokia lumia and\'}")') in raw_query)
     
     def test_filter(self):
         q = SolrSearcher().search()
@@ -52,7 +88,7 @@ class QueryTest(TestCase):
             [u"(status:0 OR company_status:0)"])
         self.assertSequenceEqual(
             q.filter(with_photo=True)._prepare_params()['fq'],
-            [u"with_photo:1"])
+            [u"with_photo:true"])
         self.assertSequenceEqual(
             q.filter(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))._prepare_params()['fq'],
             [u"date_created:{2012-05-17T14:35:41Z TO *}"])
@@ -63,7 +99,7 @@ class QueryTest(TestCase):
             q.filter(X(price__gte=100), X(price__lte=1000))._prepare_params()['fq'],
             [u"price:[100 TO *] AND price:[* TO 1000]"])
         self.assertSequenceEqual(
-            q.filter(price__between=[500, 1000], _local_params=[('cache', 'false'), ('cost', 50)]) \
+            q.filter(price__between=[500, 1000], _local_params=[('cache', False), ('cost', 50)]) \
                 ._prepare_params()['fq'],
             [u"{!cache=false cost=50}price:[500 TO 1000]"])
         self.assertSequenceEqual(
@@ -157,7 +193,7 @@ class QueryTest(TestCase):
                               _instance_mapper=category_mapper)
             q = q.facet_field('tag', _local_params={'ex': 'tag'})
             q = q.facet_query(price__lte=100,
-                              _local_params=[('ex', 'price'), ('cache', 'false')])
+                              _local_params=[('ex', 'price'), ('cache', False)])
             q = q.group('company', limit=3)
             q = q.filter(category=13, _local_params={'tag': 'category'})
             q = q.stats('price')

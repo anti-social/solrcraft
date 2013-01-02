@@ -1,4 +1,5 @@
 import os
+import sys
 from setuptools import setup, find_packages
 
 # Utility function to read the README file.
@@ -8,9 +9,16 @@ from setuptools import setup, find_packages
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
+def requires():
+    r = []
+    if sys.version_info < (2, 7):
+        r.append('ordereddict')
+    return r
+
 setup(
     name = "solar",
-    version = "0.2.1",
+    version = "0.2.15",
+    requires = requires(),
     author = "Alexander Koval",
     author_email = "kovalidis@gmail.com",
     description = ("A library to use solr in python projects."),
@@ -18,10 +26,14 @@ setup(
     keywords = "solr solar pysolr",
     url = "https://github.com/anti-social/solar",
     packages=find_packages(exclude=["tests.*", "tests"]),
-    long_description=read('README'),
+    long_description=read('README.rst'),
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "Topic :: Libraries",
+        "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+        "Topic :: Software Development :: Libraries :: Python Modules",
     ],
 )

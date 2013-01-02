@@ -5,9 +5,10 @@ from unittest import TestCase
 
 from mock import patch
 
+from solar import X, LocalParams
 from solar.searcher import SolrSearcher
 from solar.queryfilter import (
-    QueryFilter, FacetFilter, FacetFilterValue,
+    QueryFilter, Filter, FacetFilter, FacetFilterValue,
     FacetQueryFilter, FacetQueryFilterValue, RangeFilter,
     OrderingFilter, OrderingValue)
 
@@ -35,9 +36,12 @@ class QueryTest(TestCase):
   "facet_counts":{
     "facet_queries":{
       "date_created__today":28,
-      "date_created__week_ago":105},
+      "date_created__week_ago":105,
+      "dist__d5":0,
+      "dist__d10":12,
+      "dist__d20":40},
     "facet_fields":{
-      "category":[
+      "cat":[
         "100",500,
         "5",10,
         "2",5,
@@ -51,18 +55,36 @@ class QueryTest(TestCase):
             qf = QueryFilter()
             qf.add_filter(
                 CategoryFilter(
-                    'category', mincount=1,
-                    _local_params={'cache': 'false'}))
+                    'cat', 'category', mincount=1,
+                    _local_params={'cache': False}))
+            qf.add_filter(Filter('country', select_multiple=False))
             qf.add_filter(
                 FacetQueryFilter(
                     'date_created',
                     FacetQueryFilterValue(
                         'today',
-                        date_created__gte='NOW/DAY-1DAY'),
+                        X(date_created__gte='NOW/DAY-1DAY'),
+                        title='Only new',
+                        help_text='Documents one day later'),
                     FacetQueryFilterValue(
                         'week_ago',
-                        date_created__gte='NOW/DAY-7DAY')))
-            qf.add_filter(RangeFilter('price'))
+                        X(date_created__gte='NOW/DAY-7DAY'),
+                        title='Week ago')))
+            qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True,
+                                      _local_params=LocalParams(cache=False)))
+            qf.add_filter(
+                FacetQueryFilter(
+                    'dist',
+                    FacetQueryFilterValue(
+                        'd5',
+                        None, _local_params=LocalParams('geofilt', d=5)),
+                    FacetQueryFilterValue(
+                        'd10',
+                        None, _local_params=LocalParams('geofilt', d=10)),
+                    FacetQueryFilterValue(
+                        'd20',
+                        None, _local_params=LocalParams('geofilt', d=20)),
+                    select_multiple=False))
             qf.add_ordering(
                 OrderingFilter(
                     'sort',
@@ -71,10 +93,12 @@ class QueryTest(TestCase):
                     OrderingValue('-price', '-price')))
 
             params = {
-                'category': ['5', '13'],
+                'cat': ['5', '13'],
+                'country': ['us', 'ru'],
                 'date_created': ['today'],
                 'price__gte': ['100'],
-                'price__lte': ['200'],
+                'price__lte': ['200', 'nan'],
+                'dist': ['d10'],
                 'sort': ['-price'],
                 }
 
@@ -82,14 +106,19 @@ class QueryTest(TestCase):
             raw_query = str(q)
 
             self.assertTrue('facet=true' in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!ex=category cache=false}category') in raw_query)
-            self.assertTrue('facet.query=%s' % quote_plus('{!ex=date_created key=date_created__today}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
-            self.assertTrue('facet.query=%s' % quote_plus('{!ex=date_created key=date_created__week_ago}date_created:[NOW/DAY-7DAY TO *]') in raw_query)
+            self.assertTrue('facet.field=%s' % quote_plus('{!cache=false ex=cat key=cat}category') in raw_query)
+            self.assertTrue('facet.query=%s' % quote_plus('{!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
+            self.assertTrue('facet.query=%s' % quote_plus('{!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]') in raw_query)
+            self.assertTrue('facet.query=%s' % quote_plus('{!geofilt d=5 key=dist__d5 ex=dist}') in raw_query)
+            self.assertTrue('facet.query=%s' % quote_plus('{!geofilt d=10 key=dist__d10 ex=dist}') in raw_query)
+            self.assertTrue('facet.query=%s' % quote_plus('{!geofilt d=20 key=dist__d20 ex=dist}') in raw_query)
             # self.assertTrue('stats=true' in raw_query)
-            # self.assertTrue('stats.field=price' in raw_query)
-            self.assertTrue('fq=%s' % quote_plus('{!tag=category}(category:5 OR category:13)') in raw_query)
+            # self.assertTrue('stats.field=price_unit' in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!cache=false tag=cat}(category:"5" OR category:"13")') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!tag=country}country:"ru"') in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=date_created}date_created:[NOW/DAY-1DAY TO *]') in raw_query)
-            self.assertTrue('fq=%s' % quote_plus('{!tag=price}price:[100 TO *] AND price:[* TO 200]') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!cache=false tag=price}price_unit:[100 TO *] AND price_unit:[* TO 200]') in raw_query)
+            self.assertTrue('fq=%s' % quote_plus('{!geofilt d=10 tag=dist}') in raw_query)
             self.assertTrue('sort=%s' % quote_plus('price desc') in raw_query)
 
             results = q.results
@@ -99,7 +128,7 @@ class QueryTest(TestCase):
   },
   "stats":{
     "stats_fields":{
-      "price":{
+      "price_unit":{
         "min":3.5,
         "max":892.0,
         "count":1882931,
@@ -111,12 +140,14 @@ class QueryTest(TestCase):
                 
                 qf.process_results(results)
 
-                category_filter = qf.get_filter('category')
+                category_filter = qf.get_filter('cat')
                 self.assertTrue(isinstance(category_filter, CategoryFilter))
-                self.assertEqual(category_filter.name, 'category')
+                self.assertEqual(category_filter.name, 'cat')
+                self.assertEqual(category_filter.field, 'category')
                 self.assertEqual(category_filter.all_values[0].value, '100')
                 self.assertEqual(category_filter.all_values[0].count, 500)
                 self.assertEqual(category_filter.all_values[0].selected, False)
+                self.assertEqual(category_filter.all_values[0].title, u'100')
                 self.assertEqual(category_filter.all_values[1].value, '5')
                 self.assertEqual(category_filter.all_values[1].count, 10)
                 self.assertEqual(category_filter.all_values[1].selected, True)
@@ -131,15 +162,25 @@ class QueryTest(TestCase):
                 self.assertEqual(category_filter.all_values[4].selected, True)
 
                 price_filter = qf.get_filter('price')
-                self.assertEqual(price_filter.from_value, '100')
-                self.assertEqual(price_filter.to_value, '200')
+                self.assertEqual(price_filter.from_value, 100)
+                self.assertEqual(price_filter.to_value, 200)
                 self.assertEqual(price_filter.min, 3.5)
                 self.assertEqual(price_filter.max, 892.0)
 
                 date_created_filter = qf.get_filter('date_created')
                 self.assertEqual(date_created_filter.get_value('today').count, 28)
                 self.assertEqual(date_created_filter.get_value('today').selected, True)
+                self.assertEqual(date_created_filter.get_value('today').title, 'Only new')
+                self.assertEqual(date_created_filter.get_value('today').opts['help_text'], 'Documents one day later')
                 self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
+
+                dist_filter = qf.get_filter('dist')
+                self.assertEqual(dist_filter.get_value('d5').count, 0)
+                self.assertEqual(dist_filter.get_value('d5').selected, False)
+                self.assertEqual(dist_filter.get_value('d10').count, 12)
+                self.assertEqual(dist_filter.get_value('d10').selected, True)
+                self.assertEqual(dist_filter.get_value('d20').count, 40)
+                self.assertEqual(dist_filter.get_value('d20').selected, False)
 
                 ordering_filter = qf.ordering_filter
                 self.assertEqual(ordering_filter.get_value('-price').selected, True)
