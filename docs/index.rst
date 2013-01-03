@@ -6,12 +6,12 @@
 Welcome to Solar's documentation!
 =================================
 
-Contents:
+Содержание:
 
 .. toctree::
    :maxdepth: 2
 
-   quickstart
+   userguide/index
 
 Indices and tables
 ==================
