@@ -178,24 +178,67 @@ isnull
 Локальные параметры передаются в методы :func:`filter` и :func:`exclude`
 с помощью именованного аргумента `_local_params`.
 
-.. code-block:: python
+Для всех примеров нужно добавить импорт::
 
     from solar import LocalParams
 
+tag
+~~~
+
+Помечает фильтр тегом::
+
+    search_query.filter(year__between=[1990, 2000], _local_params=LocalParams(tag='year'))
+    # fq={!tag=year}year:[1990 TO 2000]
+
+Помеченный таким образом фильтр затем можно будет исключить при рассчете фасета.
+    
 frange
 ~~~~~~
 
-Используется для фильтрации по диапазону значений возвращаемых функцией::
+Используется для фильтрации по диапазону значений возвращаемых функцией.
+Параметры `frange`, все являются опциональными:
+
+- l - нижнее значение *от*
+- u - верхнее значение *до*
+- incl - включать ли нижнее значение в диапазон, по умолчанию `true`
+- incu - включать ли верхнее значение в диапазон, по умолчанию `true`
+
+.. code-block:: python
 
     from solar import func
     search_query.filter(func.log('popularity'), _local_params=LocalParams('frange', l=0.5, u=1))
     # fq={!frange l=0.5 u=1}log(popularity)
 
+.. _geofilt:
+
 geofilt
 ~~~~~~~
 
+`Spatial search <http://wiki.apache.org/solr/SpatialSearch>`_
+
 Используется для фильтрации по расстоянию на сфере,
-см. `geodist <http://wiki.apache.org/solr/SpatialSearch#geofilt_-_The_distance_filter>`_::
+см. `The distance filter <http://wiki.apache.org/solr/SpatialSearch#geofilt_-_The_distance_filter>`_.
+Параметры:
+- pt - точка, от которой считается расстояние
+- sfield - поле, в котором хранятся координаты
+- d - максимальное расстояние в километрах между точками `pt` и `sfield`
+
+`geofilt` рассчитывает *честное* расстояние между двумя точками на поверхности земли.
+
+Поле `sfield` должно быть определено в схеме следующим образом:
+
+.. code-block:: xml
+
+    <fields>
+        <!-- Другие поля -->
+
+        <fieldType name="location" class="solr.LatLonType" subFieldSuffix="_coordinate"/>
+
+        <dynamicField name="*_coordinate"  type="tdouble" indexed="true"  stored="false"/>
+        
+    </fields>
+
+.. code-block:: python
 
     search_query.filter(
         _local_params=LocalParams('geofilt', pt='45.15,-93,85', sfield='location', d=5))
@@ -211,6 +254,13 @@ geofilt
     )
     # fq={!geofilt}&pt=45.15,-93.85&sfield=location&d=5
 
+bbox
+~~~~
+
+Аналогичен :ref:`geofilt`, но использует менее точный рассчет расстояний.
+Включает немного большую область, например при d=5,
+точка отстоящая от данной на 5.1 км может быть включена в выборку.
+Может быть полезен для сортировки.
 
 cache
 ~~~~~
@@ -232,7 +282,7 @@ cost
 ~~~~
 
 Определяет порядок применения *не кешируемых* фильтров к поисковому запросу.
-По умолчанию фильтры выполняются параллельно.
+По умолчанию фильтры применяются параллельно, получившиеся множества затем пересекаются.
 Полезно для уменьшения документов, к которым будет применен фильтр.
 
 .. code-block:: python
@@ -242,3 +292,21 @@ cost
     .filter(keywords='Sequel', _local_params=LocalParams(cache=False, cost=5))
     .filter(func.mul(func.sqrt('popularity'), func.sqrt('rating')), _local_params=LocalParams(cache=False, cost=100)))
     # fq={!cache=false cost=5}keywords:Sequel&fq={!cache=false cost=100}mul(sqrt(popularity),sqrt(rating))
+
+
+Примеры
+-------
+
+Фильтр для выбора магазинов из "FL, Jacksonville" или в радиусе 50 км.
+Пример взят из `Combine with subquery <http://wiki.apache.org/solr/SpatialSearch#How_to_combine_with_a_sub-query_to_expand_results>`_:
+
+.. code-block:: python
+
+    from solar import X, LocalParams
+    (search_query
+     .filter(X(state='FL') & X(city='Jacksonville') | X(_query_=LocalParams('geofilt')))
+     .sfield('store')
+     .pt('45.15,-93.85')
+     .d(50))
+    # TODO: .order_by(func.geodist().asc())
+    # fq=((state:FL AND city:Jacksonville) OR _query_:"{!geofilt}")&sfield=store&pt=45.15,-93.85&d=50
