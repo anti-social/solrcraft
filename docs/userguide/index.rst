@@ -10,4 +10,4 @@
     querying
     facets
     grouping
-    queryfilter
+    queryfilters

@@ -88,7 +88,7 @@ Solr не позволяет вернуть все документы соотв
 
     class FilmSearcher(SolrSearcher):
         def search_active(self, q=None, *args, **kwargs):
-            return (super(FilmSearcher, self).search(q, *args, **kwargs)
+            return (self.search(q, *args, **kwargs)
                     .edismax()
                     .qt([('title', 5), ('actor_names', 2), ('description', 0.5)])
                     .filter(status=Film.STATUS_ACTIVE))
