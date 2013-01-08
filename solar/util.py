@@ -213,16 +213,16 @@ def process_field(field, op, value):
             return '(%s)' % (' %s ' % X.OR).join(
                 ['%s:%s' % (field, process_value(v)) for v in value])
         else:
-            return '%s:[* TO *] AND (NOT %s:[* TO *])' % (field, field)
+            return '(%s:[* TO *] AND NOT %s:[* TO *])' % (field, field)
     elif op == 'isnull':
         if value:
-            return '(NOT %s:[* TO *])' % field
+            return 'NOT %s:[* TO *]' % field
         else:
             return '%s:[* TO *]' % field
     elif op == 'startswith':
         return '%s:%s*' % (field, process_value(value))
     elif value is None:
-        return '(NOT %s:[* TO *])' % field
+        return 'NOT %s:[* TO *]' % field
     return '%s:%s' % (field, process_value(value))
 
 def fq_from_tuple(x):
@@ -253,7 +253,7 @@ def make_fq(x, local_params=None):
             if len(x.children) > 1:
                 fq = '(%s)' % fq
             if x.negated:
-                return ['(NOT %s)' % fq]
+                return ['NOT (%s)' % fq]
             return [fq]
         return []
 
