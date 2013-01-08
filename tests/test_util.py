@@ -64,9 +64,9 @@ class UtilTest(TestCase):
         self.assertEqual(make_fq(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
                          u"(category:1 OR category:2 OR category:3 OR category:4 OR category:5) AND (status:0 OR status:5 OR (status:1 AND company_status:6))")
         self.assertEqual(make_fq(~X(status=1)),
-                         u"(NOT status:1)")
+                         u"NOT (status:1)")
         self.assertEqual(make_fq(~X(status__in=[1, 2, 3])),
-                         u"(NOT (status:1 OR status:2 OR status:3))")
+                         u"NOT ((status:1 OR status:2 OR status:3))")
         self.assertEqual(make_fq(X(u"status:0 OR status:1")),
                          u"status\\:0 or status\\:1")
         self.assertEqual(make_fq(X(SafeUnicode(u"status:0 OR status:1"))),

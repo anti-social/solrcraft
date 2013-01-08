@@ -104,16 +104,19 @@ class QueryTest(TestCase):
             [u"{!cache=false cost=50}price:{500 TO 1000}"])
         self.assertSequenceEqual(
             q.filter(price=None)._prepare_params()['fq'],
-            [u"(NOT price:[* TO *])"])
+            [u"NOT price:[* TO *]"])
         self.assertSequenceEqual(
             q.exclude(price=None)._prepare_params()['fq'],
-            [u"(NOT (NOT price:[* TO *]))"])
+            [u"NOT (NOT price:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(price__isnull=True)._prepare_params()['fq'],
-            [u"(NOT price:[* TO *])"])
+            [u"NOT price:[* TO *]"])
         self.assertSequenceEqual(
             q.filter(price__isnull=False)._prepare_params()['fq'],
             [u"price:[* TO *]"])
+        self.assertSequenceEqual(
+            q.filter(category__in=[])._prepare_params()['fq'],
+            [u"(category:[* TO *] AND NOT category:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(X(category__in=[1, 2, 3, 4, 5]), _local_params={'tag': 'category'}) \
                 .filter(X(status=0) | X(status=5) | X(status=1) \
@@ -122,10 +125,10 @@ class QueryTest(TestCase):
              u"(status:0 OR status:5 OR (status:1 AND company_status:6))"])
         self.assertSequenceEqual(
             q.exclude(status=1)._prepare_params()['fq'],
-            [u"(NOT status:1)"])
+            [u"NOT (status:1)"])
         self.assertSequenceEqual(
             q.exclude(status__in=[1, 2, 3])._prepare_params()['fq'],
-            [u"(NOT (status:1 OR status:2 OR status:3))"])
+            [u"NOT ((status:1 OR status:2 OR status:3))"])
 
     def test_search_grouped_main(self):
         s = SolrSearcher('http://example.com:8180/solr')
