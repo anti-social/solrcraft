@@ -112,6 +112,9 @@ class QueryTest(TestCase):
             q.filter(price__isnull=True)._prepare_params()['fq'],
             [u"NOT price:[* TO *]"])
         self.assertSequenceEqual(
+            q.filter(X(genre='Comedy') & ~X(genre='Drama'))._prepare_params()['fq'],
+            [u"(genre:Comedy AND NOT (genre:Drama))"])
+        self.assertSequenceEqual(
             q.filter(price__isnull=False)._prepare_params()['fq'],
             [u"price:[* TO *]"])
         self.assertSequenceEqual(
