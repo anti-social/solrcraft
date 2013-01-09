@@ -9,7 +9,7 @@ from pysolr import SolrError
 
 from .result import SolrResults, Document
 from .facets import FacetField, FacetQuery, FacetValue
-from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq
+from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
 
 log = logging.getLogger(__name__)
@@ -157,12 +157,8 @@ class SolrQuery(object):
             params = merge_params(params, facet_query.get_params())
 
     def _make_q(self):
-        if self._q is None and not self._q_args and not self._q_kwargs:
-            q = X(SafeUnicode(u'*:*'))
-        else:
-            q = X(self._q, *self._q_args, **self._q_kwargs)
-        return make_fq(q, self._q_local_params)
-            
+        return make_q(self._q, self._q_local_params, *self._q_args, **self._q_kwargs)
+
     def _do_search(self, only_count=False):
         params = self._prepare_params(only_count=only_count)
         raw_results = self.searcher.select(self._make_q(), **params)

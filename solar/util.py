@@ -30,6 +30,8 @@ class SafeString(str):
 class SafeUnicode(unicode):
     pass
 
+ALL = SafeUnicode(u'*:*')
+
 def process_special_words(value, words=None):
     words = words or SPECIAL_WORDS
     for w in words:
@@ -108,6 +110,8 @@ class X(Node):
         obj.add(self, self.AND)
         obj.negate()
         return obj
+
+X_ALL = X(ALL)
 
 class LocalParams(OrderedDict):
     SPECIAL_CHARACTERS = " '" + SPECIAL_CHARACTERS
@@ -260,6 +264,13 @@ def make_fq(x, local_params=None):
     local_params = local_params or LocalParams()
     return '%s%s' % (str(local_params),
                      (' %s ' % x.connector).join(_make_fq(x, 0)))
+
+def make_q(q=None, local_params=None, *args, **kwargs):
+    if q is None and not args and not kwargs:
+        x = X_ALL
+    else:
+        x = X(q, *args, **kwargs)
+    return make_fq(x, local_params)
 
 def split_param(param):
     field_op = param.split('__')
