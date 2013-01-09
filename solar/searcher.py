@@ -4,7 +4,7 @@ import random
 from pysolr import Solr
 
 from query import SolrQuery
-from util import X, make_fq
+from util import SafeUnicode, X, make_q
 
 class SolrSearcherMeta(type):
     def __new__(mcs, name, bases, dct):
@@ -81,9 +81,9 @@ class SolrSearcher(object):
         for solr in self.solrs_write:
             self._commit(solr)
 
-    def delete(self, id=None, *args, **kwargs):
+    def delete(self, *args, **kwargs):
         for solr in self.solrs_write:
-            self._delete(solr, id=id, *args, **kwargs)
+            self._delete(solr, *args, **kwargs)
 
     def optimize_index(self):
         for solr in self.solrs_write:
@@ -100,12 +100,9 @@ class SolrSearcher(object):
     def _commit(self, solr):
         solr.commit()
 
-    def _delete(self, solr, id=None, *args, **kwargs):
+    def _delete(self, solr, *args, **kwargs):
         commit = kwargs.pop('commit', True)
-        q = None
-        if args or kwargs:
-            q = make_fq(X(*args, **kwargs))
-        solr.delete(id, q, commit=commit)
+        solr.delete(q=make_q(None, None, *args, **kwargs), commit=commit)
 
     def _optimize_index(self, solr):
         solr.optimize()
@@ -186,8 +183,7 @@ class CommonSearcher(SolrSearcher):
                 
         return super(CommonSearcher, self).add(patched_docs, commit=commit)
 
-    def delete(self, id=None, *args, **kwargs):
-        return (
-            super(CommonSearcher, self)
-            .delete(id, **{self.type_field: self.get_type_value()})
-        )
+    def delete(self, *args, **kwargs):
+        kwargs = kwargs.copy()
+        kwargs[self.type_field] = self.get_type_value()
+        return super(CommonSearcher, self).delete(*args, **kwargs)
