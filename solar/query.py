@@ -50,6 +50,9 @@ class SolrQuery(object):
         self._result_cache = None
 
     def __unicode__(self):
+        return urllib.unquote_plus(str(self)).decode('utf-8')
+
+    def __str__(self):
         params = self._prepare_params()
         p = []
         p.append(('q', self._make_q().encode('utf-8')))
@@ -60,9 +63,6 @@ class SolrQuery(object):
             else:
                 p.append((k, v))
         return urllib.urlencode(p, True)
-
-    def __str__(self):
-        return unicode(self)
 
     def __len__(self):
         results = self._fetch_results()
