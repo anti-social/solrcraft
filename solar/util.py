@@ -148,9 +148,9 @@ class LocalParams(OrderedDict):
                 key, value = 'type', key
         
         if contains_special_characters(key, self.SPECIAL_CHARACTERS):
-            raise ValueError("Key '%s' contents special characters" % key)
+            raise ValueError("Key '%s' contains special characters" % key)
         if key == 'type' and contains_special_characters(value, self.SPECIAL_CHARACTERS):
-            raise ValueError("Type value '%s' contents special characters" % value)
+            raise ValueError("Type value '%s' contains special characters" % value)
         
         self[key] = value
 
@@ -169,7 +169,7 @@ class LocalParams(OrderedDict):
         parts = []
         for key, value in self.items():
             if key == 'type':
-                parts.append(value)
+                parts.insert(0, value)
             else:
                 replace_words = True
                 if isinstance(value, X):

@@ -89,6 +89,8 @@ class UtilTest(TestCase):
                          '{!frange l=0 u=5}')
         self.assertEqual(str(LocalParams(['geofilt', ('d', 10), ('key', 'd10')])),
                          '{!geofilt d=10 key=d10}')
+        self.assertEqual(str(LocalParams({'type': 'join', 'from': 'id', 'to': 'manu_id'})),
+                         '{!join from=id to=manu_id}')
         self.assertEqual(str(LocalParams()), '')
         self.assertEqual(str(LocalParams(None)), '')
 
