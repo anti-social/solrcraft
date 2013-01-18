@@ -17,7 +17,7 @@ SOLR_FUNCTIONS = [
     'true', 'false', 'exists', ('if', 'if_'), ('def', 'def_'), ('not', 'not_'),
     ('and', 'and_'), ('or', 'or_'),
     # Distance
-    'dist', 'sqedist', 'hsin', 'ghhsin', 'geohash', 'strdist', 'top',
+    'dist', 'sqedist', 'geodist', 'hsin', 'ghhsin', 'geohash', 'strdist', 'top',
     ]
 
 class Function(object):

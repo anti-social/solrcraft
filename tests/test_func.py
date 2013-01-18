@@ -14,3 +14,6 @@ class FuncTest(TestCase):
 
         f = (func.exists('name', 5, 0) ^ 2) + (func.ord('popularity') ^ 0.5) + (func.recip(func.rord('price'), 1, 1000, 1000) ^ 0.3)
         self.assertEqual(str(f), 'exists(name,5,0)^2 ord(popularity)^0.5 recip(rord(price),1,1000,1000)^0.3')
+
+        f = func.min(func.geodist('store', 37.7, -122.4), func.geodist('store', 39.7, -105))
+        self.assertEqual(str(f), 'min(geodist(store,37.7,-122.4),geodist(store,39.7,-105))')
