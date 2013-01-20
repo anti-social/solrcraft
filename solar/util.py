@@ -204,10 +204,13 @@ def process_field(field, op, value):
         return '%s:{%s TO *}' % (field, process_value(value))
     elif op == 'lt':
         return '%s:{* TO %s}' % (field, process_value(value))
-    elif op == 'between':
+    elif op in ('between', 'range'):
         v0 = '*' if value[0] is None else process_value(value[0])
         v1 = '*' if value[1] is None else process_value(value[1])
-        return '%s:[%s TO %s]' % (field, v0, v1)
+        if op == 'between':
+            return '%s:{%s TO %s}' % (field, v0, v1)
+        elif op == 'range':
+            return '%s:[%s TO %s]' % (field, v0, v1)
     elif op == 'in':
         if hasattr(value, '__iter__') and len(value) > 0:
             return '(%s)' % (' %s ' % X.OR).join(

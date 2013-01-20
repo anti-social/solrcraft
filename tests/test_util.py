@@ -31,6 +31,8 @@ class UtilTest(TestCase):
                          u"(AND: ('price__gte', 100), ('price__lte', 1000))")
         self.assertEqual(unicode(X(price__between=[500, 1000])),
                          u"(AND: ('price__between', [500, 1000]))")
+        self.assertEqual(unicode(X(price__range=[2, 10])),
+                         u"(AND: ('price__range', [2, 10]))")
         self.assertEqual(unicode(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
                          u"(AND: ('category__in', [1, 2, 3, 4, 5]), (OR: ('status', 0), ('status', 5), (AND: ('status', 1), ('company_status', 6))))")
         self.assertEqual(unicode(~X(status=1)),
@@ -56,7 +58,9 @@ class UtilTest(TestCase):
         self.assertEqual(make_fq(X(price__gte=100) & X(price__lte=1000)),
                          u"price:[100 TO *] AND price:[* TO 1000]")
         self.assertEqual(make_fq(X(price__between=[500, 1000])),
-                         u"price:[500 TO 1000]")
+                         u"price:{500 TO 1000}")
+        self.assertEqual(make_fq(X(price__range=[2, 10])),
+                         u"price:[2 TO 10]")
         self.assertEqual(make_fq(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
                          u"(category:1 OR category:2 OR category:3 OR category:4 OR category:5) AND (status:0 OR status:5 OR (status:1 AND company_status:6))")
         self.assertEqual(make_fq(~X(status=1)),

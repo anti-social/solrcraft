@@ -96,12 +96,12 @@ class QueryTest(TestCase):
             q.filter(price__lt=1000)._prepare_params()['fq'],
             [u"price:{* TO 1000}"])
         self.assertSequenceEqual(
-            q.filter(X(price__gte=100), X(price__lte=1000))._prepare_params()['fq'],
-            [u"price:[100 TO *] AND price:[* TO 1000]"])
+            q.filter(X(price__lte=100), X(price__gte=1000))._prepare_params()['fq'],
+            [u"price:[* TO 100] AND price:[1000 TO *]"])
         self.assertSequenceEqual(
             q.filter(price__between=[500, 1000], _local_params=[('cache', False), ('cost', 50)]) \
                 ._prepare_params()['fq'],
-            [u"{!cache=false cost=50}price:[500 TO 1000]"])
+            [u"{!cache=false cost=50}price:{500 TO 1000}"])
         self.assertSequenceEqual(
             q.filter(price=None)._prepare_params()['fq'],
             [u"(NOT price:[* TO *])"])
