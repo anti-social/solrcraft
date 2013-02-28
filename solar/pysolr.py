@@ -369,6 +369,7 @@ class Solr(object):
     def _select(self, params):
         # specify json encoding of results
         params['wt'] = 'json'
+        self.log.debug("quering %s --> %s", self.path, params)
         params_encoded = safe_urlencode(params, True)
 
         if len(params_encoded) < 1024:
