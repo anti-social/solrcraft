@@ -176,6 +176,8 @@ class SolrQuery(object):
                            self._facet_dates, self._facet_ranges)
 
         results.add_stats_fields(raw_results.stats.get('stats_fields'))
+
+        results.add_debuginfo(raw_results.debug)
             
         return results
 

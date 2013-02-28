@@ -14,6 +14,7 @@ class SolrResults(object):
         self.stats_fields = []
         self._db_query = db_query
         self._db_query_filters = db_query_filters
+        self.debug_info = {}
 
         self.groupeds = {}
 
@@ -77,6 +78,9 @@ class SolrResults(object):
         self.facet_queries = facet_queries
         self.facet_dates = facet_dates
         self.facet_ranges = facet_ranges
+
+    def add_debuginfo(self, debug):
+        self.debug_info = debug
 
     def get_facet_field(self, field):
         for facet in self.facet_fields:
