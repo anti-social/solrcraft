@@ -115,6 +115,11 @@ class Grouped(object):
 
     def add_doc(self, doc):
         self.docs.append(doc)
+
+    def get_group(self, value):
+        for group in self.groups:
+            if group.value == value:
+                return group
     
 class Group(object):
     def __init__(self, value, ndocs):
