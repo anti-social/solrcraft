@@ -55,20 +55,9 @@ class Pagination(object):
         self.per_page = per_page
         self.offset = (self.page - 1) * self.per_page
 
-    def slice_query(self):
-        if self.query.count is None:
-            self.query[self.offset:self.offset + self.per_page]
+        self.items = self.query[self.offset:self.offset + self.per_page]
+        self.total = len(self.query)
         
-    @property
-    def items(self):
-        self.slice_query()
-        return list(self.query)
-
-    @property
-    def total(self):
-        self.slice_query()
-        return len(self.query)
-
     @property
     def pages(self):
         return int(ceil(self.total / float(self.per_page)))
