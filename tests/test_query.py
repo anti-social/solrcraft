@@ -96,24 +96,30 @@ class QueryTest(TestCase):
             q.filter(price__lt=1000)._prepare_params()['fq'],
             [u"price:{* TO 1000}"])
         self.assertSequenceEqual(
-            q.filter(X(price__gte=100), X(price__lte=1000))._prepare_params()['fq'],
-            [u"price:[100 TO *] AND price:[* TO 1000]"])
+            q.filter(X(price__lte=100), X(price__gte=1000))._prepare_params()['fq'],
+            [u"price:[* TO 100] AND price:[1000 TO *]"])
         self.assertSequenceEqual(
             q.filter(price__between=[500, 1000], _local_params=[('cache', False), ('cost', 50)]) \
                 ._prepare_params()['fq'],
-            [u"{!cache=false cost=50}price:[500 TO 1000]"])
+            [u"{!cache=false cost=50}price:{500 TO 1000}"])
         self.assertSequenceEqual(
             q.filter(price=None)._prepare_params()['fq'],
-            [u"(NOT price:[* TO *])"])
+            [u"NOT price:[* TO *]"])
         self.assertSequenceEqual(
             q.exclude(price=None)._prepare_params()['fq'],
-            [u"(NOT (NOT price:[* TO *]))"])
+            [u"NOT (NOT price:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(price__isnull=True)._prepare_params()['fq'],
-            [u"(NOT price:[* TO *])"])
+            [u"NOT price:[* TO *]"])
+        self.assertSequenceEqual(
+            q.filter(X(genre='Comedy') & ~X(genre='Drama'))._prepare_params()['fq'],
+            [u"(genre:Comedy AND NOT (genre:Drama))"])
         self.assertSequenceEqual(
             q.filter(price__isnull=False)._prepare_params()['fq'],
             [u"price:[* TO *]"])
+        self.assertSequenceEqual(
+            q.filter(category__in=[])._prepare_params()['fq'],
+            [u"(category:[* TO *] AND NOT category:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(X(category__in=[1, 2, 3, 4, 5]), _local_params={'tag': 'category'}) \
                 .filter(X(status=0) | X(status=5) | X(status=1) \
@@ -122,10 +128,10 @@ class QueryTest(TestCase):
              u"(status:0 OR status:5 OR (status:1 AND company_status:6))"])
         self.assertSequenceEqual(
             q.exclude(status=1)._prepare_params()['fq'],
-            [u"(NOT status:1)"])
+            [u"NOT (status:1)"])
         self.assertSequenceEqual(
             q.exclude(status__in=[1, 2, 3])._prepare_params()['fq'],
-            [u"(NOT (status:1 OR status:2 OR status:3))"])
+            [u"NOT ((status:1 OR status:2 OR status:3))"])
 
     def test_search_grouped_main(self):
         s = SolrSearcher('http://example.com:8180/solr')

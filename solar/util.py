@@ -30,6 +30,8 @@ class SafeString(str):
 class SafeUnicode(unicode):
     pass
 
+ALL = SafeUnicode(u'*:*')
+
 def process_special_words(value, words=None):
     words = words or SPECIAL_WORDS
     for w in words:
@@ -109,6 +111,8 @@ class X(Node):
         obj.negate()
         return obj
 
+X_ALL = X(ALL)
+
 class LocalParams(OrderedDict):
     SPECIAL_CHARACTERS = " '" + SPECIAL_CHARACTERS
     
@@ -144,9 +148,9 @@ class LocalParams(OrderedDict):
                 key, value = 'type', key
         
         if contains_special_characters(key, self.SPECIAL_CHARACTERS):
-            raise ValueError("Key '%s' contents special characters" % key)
+            raise ValueError("Key '%s' contains special characters" % key)
         if key == 'type' and contains_special_characters(value, self.SPECIAL_CHARACTERS):
-            raise ValueError("Type value '%s' contents special characters" % value)
+            raise ValueError("Type value '%s' contains special characters" % value)
         
         self[key] = value
 
@@ -165,7 +169,7 @@ class LocalParams(OrderedDict):
         parts = []
         for key, value in self.items():
             if key == 'type':
-                parts.append(value)
+                parts.insert(0, value)
             else:
                 replace_words = True
                 if isinstance(value, X):
@@ -204,25 +208,28 @@ def process_field(field, op, value):
         return '%s:{%s TO *}' % (field, process_value(value))
     elif op == 'lt':
         return '%s:{* TO %s}' % (field, process_value(value))
-    elif op == 'between':
+    elif op in ('between', 'range'):
         v0 = '*' if value[0] is None else process_value(value[0])
         v1 = '*' if value[1] is None else process_value(value[1])
-        return '%s:[%s TO %s]' % (field, v0, v1)
+        if op == 'between':
+            return '%s:{%s TO %s}' % (field, v0, v1)
+        elif op == 'range':
+            return '%s:[%s TO %s]' % (field, v0, v1)
     elif op == 'in':
         if hasattr(value, '__iter__') and len(value) > 0:
             return '(%s)' % (' %s ' % X.OR).join(
                 ['%s:%s' % (field, process_value(v)) for v in value])
         else:
-            return '%s:[* TO *] AND (NOT %s:[* TO *])' % (field, field)
+            return '(%s:[* TO *] AND NOT %s:[* TO *])' % (field, field)
     elif op == 'isnull':
         if value:
-            return '(NOT %s:[* TO *])' % field
+            return 'NOT %s:[* TO *]' % field
         else:
             return '%s:[* TO *]' % field
     elif op == 'startswith':
         return '%s:%s*' % (field, process_value(value))
     elif value is None:
-        return '(NOT %s:[* TO *])' % field
+        return 'NOT %s:[* TO *]' % field
     return '%s:%s' % (field, process_value(value))
 
 def fq_from_tuple(x):
@@ -253,13 +260,20 @@ def make_fq(x, local_params=None):
             if len(x.children) > 1:
                 fq = '(%s)' % fq
             if x.negated:
-                return ['(NOT %s)' % fq]
+                return ['NOT (%s)' % fq]
             return [fq]
         return []
 
     local_params = local_params or LocalParams()
     return '%s%s' % (str(local_params),
                      (' %s ' % x.connector).join(_make_fq(x, 0)))
+
+def make_q(q=None, local_params=None, *args, **kwargs):
+    if q is None and not args and not kwargs:
+        x = X_ALL
+    else:
+        x = X(q, *args, **kwargs)
+    return make_fq(x, local_params)
 
 def split_param(param):
     field_op = param.split('__')
