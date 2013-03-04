@@ -48,17 +48,6 @@ class SolrSearcher(object):
 
         self._field_name_to_facet_cls_cache = {}
 
-    def _get_facet_cls(self, field_name):
-        if field_name in self._field_name_to_facet_cls_cache:
-            return self._field_name_to_facet_cls_cache[field_name]
-        
-        for facet_cls in self.facets:
-            matched_cls = facet_cls.match(field_name)
-            if matched_cls:
-                self._field_name_to_facet_cls_cache[field_name] = matched_cls
-                return facet_cls
-        return Facet
-
     # public methods
 
     def search(self, q=None, *args, **kwargs):
