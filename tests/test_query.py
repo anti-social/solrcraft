@@ -134,7 +134,12 @@ class QueryTest(TestCase):
             [u"NOT ((status:1 OR status:2 OR status:3))"])
 
     def test_search_grouped_main(self):
-        s = SolrSearcher('http://example.com:8180/solr')
+        class TestSearcher(SolrSearcher):
+            def instance_mapper(self, ids, db_query=None):
+                return dict((id, {'id': int(id), 'name': ' '.join([id, id])})
+                            for id in ids)
+
+        s = TestSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):
             s.solrs_read[0]._send_request.return_value = '''{
   "grouped":{
@@ -192,6 +197,10 @@ class QueryTest(TestCase):
 
             def category_mapper(ids):
                 return dict((id, {'id': int(id), 'name': id}) for id in ids)
+
+            def company_mapper(ids):
+                return dict((id, {'id': int(id), 'name': ' '.join([id, id])})
+                             for id in ids)
             
             q = s.search()
             q = q.facet_field('category', mincount=5, limit=10,
@@ -200,7 +209,7 @@ class QueryTest(TestCase):
             q = q.facet_field('tag', _local_params={'ex': 'tag'})
             q = q.facet_query(price__lte=100,
                               _local_params=[('ex', 'price'), ('cache', False)])
-            q = q.group('company', limit=3)
+            q = q.group('company', limit=3, _instance_mapper=company_mapper)
             q = q.filter(category=13, _local_params={'tag': 'category'})
             q = q.stats('price')
             q = q.order_by('-date_created')
@@ -228,13 +237,23 @@ class QueryTest(TestCase):
             self.assertEqual(grouped.ngroups, 109)
             self.assertEqual(grouped.ndocs, 281)
             self.assertEqual(grouped.groups[0].ndocs, 9)
+            self.assertEqual(grouped.groups[0].value, '1')
+            self.assertEqual(grouped.groups[0].instance['name'], '1 1')
             self.assertEqual(grouped.groups[0].docs[0].id, '111')
             self.assertEqual(grouped.groups[0].docs[0].name, 'Test 1')
+            self.assertEqual(grouped.groups[0].docs[0].instance['id'], 111)
+            self.assertEqual(grouped.groups[0].docs[0].instance['name'], '111 111')
             self.assertEqual(grouped.groups[0].docs[-1].id, '333')
             self.assertEqual(grouped.groups[0].docs[-1].name, 'Test 3')
+            self.assertEqual(grouped.groups[0].docs[-1].instance['id'], 333)
+            self.assertEqual(grouped.groups[0].docs[-1].instance['name'], '333 333')
             self.assertEqual(grouped.groups[1].ndocs, 1)
+            self.assertEqual(grouped.groups[1].value, '3')
+            self.assertEqual(grouped.groups[1].instance['name'], '3 3')
             self.assertEqual(grouped.groups[1].docs[0].id, '555')
             self.assertEqual(grouped.groups[1].docs[0].name, 'Test 5')
+            self.assertEqual(grouped.groups[1].docs[0].instance['id'], 555)
+            self.assertEqual(grouped.groups[1].docs[0].instance['name'], '555 555')
             self.assertEqual(len(grouped.docs), 0)
             
             self.assertEqual(len(r.facet_fields), 2)

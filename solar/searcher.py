@@ -3,8 +3,10 @@ import random
 
 from pysolr import Solr
 
-from query import SolrQuery
-from util import SafeUnicode, X, make_q
+from .query import SolrQuery
+from .util import SafeUnicode, X, make_q
+from .grouped import Group
+from .document import Document
 
 class SolrSearcherMeta(type):
     def __new__(mcs, name, bases, dct):
@@ -26,9 +28,13 @@ class SolrSearcher(object):
     model = None
     session = None
     db_field = 'id'
+    db_field_type = int
     query_cls = SolrQuery
+    group_cls = Group
+    document_cls = Document
 
-    def __init__(self, solr_url=None, model=None, session=None, db_field=None, query_cls=None):
+    def __init__(self, solr_url=None, model=None, session=None, db_field=None,
+                 query_cls=None, group_cls=None, document_cls=None):
         self.solr_url = solr_url or self.solr_url
         self.solr_read_urls = self.solr_read_urls or []
         self.solr_write_urls = self.solr_write_urls or []
@@ -45,6 +51,8 @@ class SolrSearcher(object):
         self.session = session or self.session
         self.db_field = db_field or self.db_field
         self.query_cls = query_cls or self.query_cls
+        self.group_cls = group_cls or self.group_cls
+        self.document_cls = document_cls or self.document_cls
 
         self._field_name_to_facet_cls_cache = {}
 
@@ -98,41 +106,24 @@ class SolrSearcher(object):
 
     # methods to override
 
-    def get_id(self, id):
-        return int(id)
-
     def get_db_query(self):
         return self.session.query(self.model)
 
-    def get_filter_by_method(self, db_query):
-        if hasattr(db_query, 'filter_by'):
-            # SQLAlchemy query
-            return db_query.filter_by
-        # Django query
-        return db_query.filter
-
-    def get_instances(self, ids, db_query=None, db_query_filters=[]):
+    def instance_mapper(self, ids, db_query=None):
         if not ids:
             return {}
+
+        ids = map(self.db_field_type, ids)
 
         if not db_query:
             db_query = self.get_db_query()
 
-        for query_filter in db_query_filters:
-            if callable(query_filter):
-                db_query = query_filter(db_query)
-            elif isinstance(query_filter, tuple):
-                db_query = self.get_filter_by_method(db_query)(
-                    **{query_filter[0]: query_filter[1]})
-            else:
-                db_query = db_query.filter(query_filter)
-
-        instances = {}
         if self.model is None:
             model = db_query._mapper_zero().class_
         else:
             model = self.model
         db_query = db_query.filter(getattr(model, self.db_field).in_(ids))
+        instances = {}
         for obj in db_query:
             instances[obj.id] = obj
 

@@ -7,8 +7,10 @@ import warnings
 
 from pysolr import SolrError
 
-from .result import SolrResults, Document
+from .result import SolrResults
+from .stats import Stats
 from .facets import FacetField, FacetQuery, FacetValue
+from .grouped import Grouped
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
 
@@ -38,14 +40,16 @@ class SolrQuery(object):
         self._q_args = args
         self._q_kwargs = kwargs
         self._fq = []
+        self._groupeds = []
         self._facet_fields = []
         self._facet_queries = []
         self._facet_dates = []
         self._facet_ranges = []
+        self._stats_fields = []
         self._params = {}
 
+        self._instance_mapper = None
         self._db_query = None
-        self._db_query_filters = []
 
         self._result_cache = None
 
@@ -150,11 +154,17 @@ class SolrQuery(object):
             # params.pop('defType', None)
             warnings.warn('DisMax query parser does not support q=*:* or q=field:text')
 
+        for grouped in self._groupeds:
+            params = merge_params(params, grouped.get_params())
+
         for facet_field in self._facet_fields:
             params = merge_params(params, facet_field.get_params())
-                    
+
         for facet_query in self._facet_queries:
             params = merge_params(params, facet_query.get_params())
+
+        for stats in self._stats_fields:
+            params = merge_params(params, stats.get_params())
 
     def _make_q(self):
         return make_q(self._q, self._q_local_params, *self._q_args, **self._q_kwargs)
@@ -162,44 +172,22 @@ class SolrQuery(object):
     def _do_search(self, only_count=False):
         params = self._prepare_params(only_count=only_count)
         raw_results = self.searcher.select(self._make_q(), **params)
-
-        results = SolrResults(self, raw_results.hits,
-                               self._db_query, self._db_query_filters)
-        self._process_facets(raw_results.facets)
-        
-        if raw_results.grouped:
-            results.add_grouped_docs(raw_results.grouped)
-        else:
-            results.add_docs(raw_results.docs)
-            
-        results.add_facets(self._facet_fields, self._facet_queries,
-                           self._facet_dates, self._facet_ranges)
-
-        results.add_stats_fields(raw_results.stats.get('stats_fields'))
-
-        results.add_debuginfo(raw_results.debug)
-            
-        return results
-
-    def _process_facets(self, facets):
-        # facet fields
-        for facet_field in self._facet_fields:
-            facet_field.process_data(facets['facet_fields'])
-        
-        # facet queries
-        for facet_query in self._facet_queries:
-            facet_query.process_data(facets['facet_queries'])
+        return SolrResults(self, raw_results)
             
     def _clone(self, cls=None):
         cls = cls or self.__class__
         clone = cls(self.searcher, self._q, *self._q_args, **self._q_kwargs)
         clone._q_local_params = deepcopy(self._q_local_params)
         clone._fq = deepcopy(self._fq)
+        clone._groupeds = deepcopy(self._groupeds)
         clone._facet_fields = deepcopy(self._facet_fields)
         clone._facet_queries = deepcopy(self._facet_queries)
+        clone._facet_ranges = deepcopy(self._facet_ranges)
+        clone._facet_dates = deepcopy(self._facet_dates)
+        clone._stats_fields = deepcopy(self._stats_fields)
         clone._params = deepcopy(self._params)
+        clone._instance_mapper = self._instance_mapper
         clone._db_query = self._db_query
-        clone._db_query_filters = copy(self._db_query_filters)
         return clone
     clone = _clone
 
@@ -240,15 +228,14 @@ class SolrQuery(object):
         clone._fq.append((~X(*args, **kwargs), local_params))
         return clone
 
+    def instance_mapper(self, instance_mapper):
+        clone = self._clone()
+        clone._instance_mapper = instance_mapper
+        return clone
+
     def with_db_query(self, db_query):
         clone = self._clone()
         clone._db_query = db_query
-        return clone
-
-    def filter_db_query(self, *args, **kwargs):
-        clone = self._clone()
-        clone._db_query_filters += args
-        clone._db_query_filters += kwargs.items()
         return clone
 
     def only(self, *fields):
@@ -331,11 +318,18 @@ class SolrQuery(object):
         return clone
         
     
-    def group(self, field, limit=1, offset=None, sort=None, main=None, format=None, truncate=None):
+    def group(self, field, _instance_mapper=None,
+              limit=1, offset=None, sort=None, main=None,
+              format=None, truncate=None, **kwargs):
         clone = self._clone()
+        grouped = Grouped(
+            field, self.searcher, instance_mapper=_instance_mapper,
+            limit=limit, offset=offset, sort=sort,
+            main=main, format=format, truncate=truncate,
+            **kwargs)
+        clone._groupeds.append(grouped)
         clone._params['group'] = True
         clone._params['group.ngroups'] = True
-        clone._params['group.field'] = field
         clone._params['group.limit'] = limit
         clone._params['group.offset'] = offset
         clone._params['group.sort'] = sort
@@ -346,8 +340,8 @@ class SolrQuery(object):
 
     def stats(self, field):
         clone = self._clone()
+        clone._stats_fields.append(Stats(field))
         clone._params['stats'] = True
-        clone._params['stats.field'] = field
         return clone
 
     def get(self, *args, **kwargs):

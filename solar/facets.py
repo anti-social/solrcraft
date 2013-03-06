@@ -33,8 +33,9 @@ class FacetField(object):
             params['f.%s.facet.%s' % (self.field, p)] = v
         return params
 
-    def process_data(self, raw_facet_fields):
+    def process_data(self, results):
         self.values = []
+        raw_facet_fields = results.raw_results.facets['facet_fields']
         facet_data = raw_facet_fields[self.local_params.get('key', self.field)]
         for i in xrange(0, len(facet_data), 2):
             self.add_value(FacetValue(facet_data[i], facet_data[i+1]))
@@ -74,6 +75,7 @@ class FacetQuery(object):
         params['facet.query'] = [make_fq(self.fq, self.local_params)]
         return params
         
-    def process_data(self, raw_facet_queries):
+    def process_data(self, results):
+        raw_facet_queries = results.raw_results.facets['facet_queries']
         self.count = raw_facet_queries[
             self.local_params.get('key', make_fq(self.fq, self.local_params))]
