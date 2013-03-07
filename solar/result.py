@@ -1,5 +1,3 @@
-from .stats import Stats
-
 
 class SolrResults(object):
     def __init__(self, query, raw_results):
