@@ -338,9 +338,10 @@ class SolrQuery(object):
         clone._params['group.truncate'] = truncate
         return clone
 
-    def stats(self, field):
+    def stats(self, field, facet_fields=None):
         clone = self._clone()
-        clone._stats_fields.append(Stats(field))
+        clone._stats_fields.append(
+            Stats(field, facet_fields=facet_fields))
         clone._params['stats'] = True
         return clone
 
