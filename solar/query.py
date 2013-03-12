@@ -329,7 +329,8 @@ class SolrQuery(object):
         return clone
         
     
-    def group(self, field, limit=1, offset=None, sort=None, main=None, format=None, truncate=None):
+    def group(self, field, limit=1, offset=None, sort=None, main=None,
+              format=None, truncate=None, facet=None, **kwargs):
         clone = self._clone()
         clone._params['group'] = True
         clone._params['group.ngroups'] = True
@@ -340,6 +341,9 @@ class SolrQuery(object):
         clone._params['group.main'] = main
         clone._params['group.format'] = format
         clone._params['group.truncate'] = truncate
+        clone._params['group.facet'] = facet
+        for k, v in kwargs.items():
+            clone._params['group.%s' % k] = v
         return clone
 
     def stats(self, field):
