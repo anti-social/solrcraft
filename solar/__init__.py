@@ -3,4 +3,4 @@ from query import SolrQuery, SolrError
 from util import X, LocalParams
 
 
-__version__ = (0, 2, 17, 'alpha')
+__version__ = (0, 2, 18, 'alpha')
