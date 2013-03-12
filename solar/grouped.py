@@ -7,6 +7,8 @@ class Grouped(object):
     def __init__(self, field, searcher=None, instance_mapper=None, **kwargs):
         self.field = field
         self.grouped_params = kwargs
+        if self.grouped_params.get('ngroups') is None:
+            self.grouped_params['ngroups'] = True
         self.ngroups = None # present if group.ngroups=true else None
         self.matches = self.ndocs = None
         self.groups = [] # grouped format
@@ -30,6 +32,8 @@ class Grouped(object):
         params = {}
         params['group'] = True
         params['group.field'] = [make_fq(X(self.field))]
+        for p, v in self.grouped_params.items():
+            params['group.%s' % p] = v
         return params
 
     def process_data(self, results):

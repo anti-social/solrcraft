@@ -223,6 +223,7 @@ class QueryTest(TestCase):
             self.assertTrue('facet.field=%s' % quote_plus('{!ex=tag}tag') in raw_query)
             self.assertTrue('facet.query=%s' % quote_plus('{!ex=price cache=false}price:[* TO 100]') in raw_query)
             self.assertTrue('group=true' in raw_query)
+            self.assertTrue('group.ngroups=true' in raw_query)
             self.assertTrue('group.limit=3' in raw_query)
             self.assertTrue('group.field=company' in raw_query)
             self.assertTrue('fq=%s' % quote_plus('{!tag=category}category:13') in raw_query)

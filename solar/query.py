@@ -319,23 +319,15 @@ class SolrQuery(object):
         
     
     def group(self, field, _instance_mapper=None,
-              limit=1, offset=None, sort=None, main=None,
-              format=None, truncate=None, **kwargs):
+              limit=1, offset=None, sort=None, main=None, ngroups=True,
+              format=None, truncate=None, facet=None, **kwargs):
         clone = self._clone()
         grouped = Grouped(
             field, self.searcher, instance_mapper=_instance_mapper,
-            limit=limit, offset=offset, sort=sort,
-            main=main, format=format, truncate=truncate,
+            limit=limit, offset=offset, sort=sort, main=main, ngroups=ngroups,
+            format=format, truncate=truncate, facet=facet,
             **kwargs)
         clone._groupeds.append(grouped)
-        clone._params['group'] = True
-        clone._params['group.ngroups'] = True
-        clone._params['group.limit'] = limit
-        clone._params['group.offset'] = offset
-        clone._params['group.sort'] = sort
-        clone._params['group.main'] = main
-        clone._params['group.format'] = format
-        clone._params['group.truncate'] = truncate
         return clone
 
     def stats(self, field, facet_fields=None):
