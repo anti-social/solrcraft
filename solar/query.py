@@ -201,8 +201,7 @@ class SolrQuery(object):
             return self._fetch_results()
         except AttributeError, e:
             # catch AttributeError cause else __getattr__ will be called
-            log.exception(e)
-            raise RuntimeError(*e.args)
+            raise RuntimeError(e.__class__.__name__, *e.args), None, sys.exc_info()[2]
 
     def search(self, q):
         clone = self._clone()
