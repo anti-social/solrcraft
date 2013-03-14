@@ -1,3 +1,6 @@
+import operator
+from itertools import chain, izip_longest, starmap
+
 
 class SolrResults(object):
     def __init__(self, query, raw_results):
@@ -10,15 +13,15 @@ class SolrResults(object):
         self.facet_queries = self.query._facet_queries
         self.facet_dates = self.query._facet_dates
         self.facet_ranges = self.query._facet_ranges
+        self.facet_pivots = self.query._facet_pivots
         self.stats_fields = self.query._stats_fields
         self.groupeds = self.query._groupeds
 
-        for facet_field in self.facet_fields:
-            facet_field.process_data(self)
+        for facet in chain(self.facet_fields, self.facet_queries,
+                           self.facet_dates, self.facet_ranges,
+                           self.facet_pivots):
+            facet.process_data(self)
         
-        for facet_query in self.facet_queries:
-            facet_query.process_data(self)
-
         for grouped in self.groupeds:
             grouped.process_data(self)
 
@@ -41,16 +44,14 @@ class SolrResults(object):
             if st.field == field:
                 return st
         
-    def add_facets(self, facet_fields, facet_queries,
-                   facet_dates, facet_ranges):
-        self.facet_fields = facet_fields
-        self.facet_queries = facet_queries
-        self.facet_dates = facet_dates
-        self.facet_ranges = facet_ranges
-
     def get_facet_field(self, field):
         for facet in self.facet_fields:
             if facet.field == field:
+                return facet
+
+    def get_facet_pivot(self, *fields):
+        for facet in self.facet_pivots:
+            if all(starmap(operator.eq, izip_longest(facet.fields, fields))):
                 return facet
 
     def _populate_instances(self):

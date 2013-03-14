@@ -140,6 +140,189 @@ class QueryTest(TestCase):
             q.exclude(status__in=[1, 2, 3])._prepare_params()['fq'],
             [u"NOT ((status:1 OR status:2 OR status:3))"])
 
+
+    def test_facet_pivot(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 88318,
+    "start": 0,
+    "docs": []
+  },
+  "facet_counts": {
+    "facet_queries": {},
+    "facet_fields": {},
+    "facet_dates": {},
+    "facet_ranges": {},
+    "facet_pivot": {
+      "tcv": [
+        {
+          "field": "type",
+          "value": "B",
+          "count": 88203,
+          "pivot": [
+            {
+              "field": "category",
+              "value": "14210102",
+              "count": 13801,
+              "pivot": [
+                {
+                  "field": "visible",
+                  "value": true,
+                  "count": 11159
+                },
+                {
+                  "field": "visible",
+                  "value": false,
+                  "count": 2642
+                }
+              ]
+            },
+            {
+              "field": "category",
+              "value": "14210101",
+              "count": 2379,
+              "pivot": [
+                {
+                  "field": "visible",
+                  "value": true,
+                  "count": 2366
+                },
+                {
+                  "field": "visible",
+                  "value": false,
+                  "count": 13
+                }
+              ]
+            },
+            {
+              "field": "category",
+              "value": "607",
+              "count": 1631,
+              "pivot": [
+                {
+                  "field": "visible",
+                  "value": true,
+                  "count": 1462
+                },
+                {
+                  "field": "visible",
+                  "value": false,
+                  "count": 169
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field": "type",
+          "value": "C",
+          "count": 82421,
+          "pivot": [
+            {
+              "field": "category",
+              "value": "14210102",
+              "count": 13801,
+              "pivot": [
+                {
+                  "field": "visible",
+                  "value": true,
+                  "count": 11159
+                },
+                {
+                  "field": "visible",
+                  "value": false,
+                  "count": 2642
+                }
+              ]
+            },
+            {
+              "field": "category",
+              "value": "14210101",
+              "count": 2379,
+              "pivot": [
+                {
+                  "field": "visible",
+                  "value": true,
+                  "count": 2366
+                },
+                {
+                  "field": "visible",
+                  "value": false,
+                  "count": 13
+                }
+              ]
+            },
+            {
+              "field": "category",
+              "value": "607",
+              "count": 1631,
+              "pivot": [
+                {
+                  "field": "visible",
+                  "value": true,
+                  "count": 1462
+                },
+                {
+                  "field": "visible",
+                  "value": false,
+                  "count": 169
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field": "type",
+          "value": "S",
+          "count": 1,
+          "pivot": []
+        }
+      ]
+    }
+  }
+}
+'''
+
+            q = s.search()
+            q = q.facet_pivot('type', ('category', _obj_mapper, dict(limit=3)), 'visible',
+                              _local_params=LocalParams(ex='type,category', key='tcv'))
+
+            raw_query = str(q)
+
+            self.assertTrue('facet=true' in raw_query)
+            self.assertTrue('facet.pivot=%s' % quote_plus('{!ex=type,category key=tcv}type,category,visible') in raw_query)
+            self.assertTrue('f.category.facet.limit=3' in raw_query)
+
+            r = q.results
+            facet = r.get_facet_pivot('type', 'category', 'visible')
+            self.assertListEqual(facet.fields, ['type', 'category', 'visible'])
+            self.assertEqual(facet.field, 'type')
+            self.assertEqual(facet.values[0].value, 'B')
+            self.assertEqual(facet.values[0].count, 88203)
+            self.assertEqual(facet.values[0].pivot.field, 'category')
+            self.assertEqual(facet.values[0].pivot.values[0].value, '14210102')
+            self.assertEqual(facet.values[0].pivot.values[0].count, 13801)
+            self.assertEqual(facet.values[0].pivot.values[0].pivot.field, 'visible')
+            self.assertEqual(facet.values[0].pivot.values[0].pivot.values[0].value, True)
+            self.assertEqual(facet.values[0].pivot.values[0].pivot.values[0].count, 11159)
+            self.assertEqual(facet.values[0].pivot.values[0].pivot.values[1].value, False)
+            self.assertEqual(facet.values[0].pivot.values[0].pivot.values[1].count, 2642)
+            self.assertEqual(facet.values[0].pivot.values[0].instance, (14210102, '14210102 14210102'))
+            self.assertEqual(facet.values[1].value, 'C')
+            self.assertEqual(facet.values[1].count, 82421)
+            self.assertEqual(id(facet.values[0].pivot.values[0].instance),
+                             id(facet.values[1].pivot.values[0].instance))
+            self.assertEqual(facet.values[1].pivot.get_value('607').value, '607')
+            self.assertEqual(facet.values[1].pivot.get_value('607').count, 1631)
+            self.assertEqual(facet.values[1].pivot.get_value('607').pivot.get_value(True).count, 1462)
+            self.assertEqual(facet.values[1].pivot.get_value('607').pivot.get_value(False).count, 169)
+            self.assertEqual(facet.values[2].value, 'S')
+            self.assertEqual(facet.values[2].count, 1)
+            self.assertRaises(IndexError, lambda: facet.values[3])
+
     def test_search_grouped_main(self):
         class TestSearcher(SolrSearcher):
             def instance_mapper(self, ids, db_query=None):

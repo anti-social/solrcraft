@@ -4,12 +4,13 @@ from copy import copy, deepcopy
 import urllib
 import logging
 import warnings
+from itertools import chain
 
 from pysolr import SolrError
 
 from .result import SolrResults
 from .stats import Stats
-from .facets import FacetField, FacetQuery, FacetValue
+from .facets import FacetField, FacetQuery, FacetPivot
 from .grouped import Grouped
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
@@ -45,6 +46,7 @@ class SolrQuery(object):
         self._facet_queries = []
         self._facet_dates = []
         self._facet_ranges = []
+        self._facet_pivots = []
         self._stats_fields = []
         self._params = {}
 
@@ -157,11 +159,10 @@ class SolrQuery(object):
         for grouped in self._groupeds:
             params = merge_params(params, grouped.get_params())
 
-        for facet_field in self._facet_fields:
-            params = merge_params(params, facet_field.get_params())
-
-        for facet_query in self._facet_queries:
-            params = merge_params(params, facet_query.get_params())
+        for facet in chain(self._facet_fields, self._facet_queries,
+                           self._facet_dates, self._facet_ranges,
+                           self._facet_pivots):
+            params = merge_params(params, facet.get_params())
 
         for stats in self._stats_fields:
             params = merge_params(params, stats.get_params())
@@ -184,6 +185,7 @@ class SolrQuery(object):
         clone._facet_queries = deepcopy(self._facet_queries)
         clone._facet_ranges = deepcopy(self._facet_ranges)
         clone._facet_dates = deepcopy(self._facet_dates)
+        clone._facet_pivots = deepcopy(self._facet_pivots)
         clone._stats_fields = deepcopy(self._stats_fields)
         clone._params = deepcopy(self._params)
         clone._instance_mapper = self._instance_mapper
@@ -307,16 +309,23 @@ class SolrQuery(object):
         clone = self._clone()
         local_params = LocalParams(_local_params)
         clone._facet_fields.append(
-            FacetField(field, local_params, instance_mapper=_instance_mapper, **kwargs))
+            FacetField(field, local_params=local_params,
+                       instance_mapper=_instance_mapper, **kwargs))
         return clone
 
     def facet_query(self, *args, **kwargs):
         clone = self._clone()
         local_params = LocalParams(kwargs.pop('_local_params', None))
         clone._facet_queries.append(
-            FacetQuery(X(*args, **kwargs), local_params))
+            FacetQuery(X(*args, **kwargs), local_params=local_params))
         return clone
         
+    def facet_pivot(self, *fields, **kwargs):
+        clone = self._clone()
+        local_params = LocalParams(kwargs.pop('_local_params', None))
+        clone._facet_pivots.append(
+            FacetPivot(*fields, local_params=local_params))
+        return clone
     
     def group(self, field, _instance_mapper=None,
               limit=1, offset=None, sort=None, main=None, ngroups=True,
