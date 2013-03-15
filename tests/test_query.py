@@ -141,6 +141,82 @@ class QueryTest(TestCase):
             [u"NOT ((status:1 OR status:2 OR status:3))"])
 
 
+    def test_facet_field(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 19083,
+    "start": 0,
+    "docs": []
+  },
+  "facet_counts": {
+    "facet_queries": {},
+    "facet_fields": {
+      "cat": [
+        "3540208",
+        19083,
+        "1",
+        0,
+        "1001",
+        0,
+        "100101",
+        0,
+        "100102",
+        0
+      ],
+      "cat_ex": [
+        "29",
+        147163,
+        "64101",
+        43375,
+        "628",
+        30043,
+        "3540208",
+        19083,
+        "61910",
+        18397
+      ]
+    }
+  }
+}
+'''
+            q = s.search()
+            q = q.filter(category=3540208, _local_params={'tag': 'cat'})
+            q = q.facet(limit=5)
+            q = q.facet_field('category', _instance_mapper=_obj_mapper,
+                              _local_params={'key': 'cat'})
+            q = q.facet_field('category', _instance_mapper=_obj_mapper,
+                              _local_params={'ex': 'cat', 'key': 'cat_ex'})
+
+            raw_query = str(q)
+
+            self.assertTrue('fq=%s' % quote_plus('{!tag=cat}category:3540208') in raw_query)
+            self.assertTrue('facet=true' in raw_query)
+            self.assertTrue('facet.limit=5' in raw_query)
+            self.assertTrue('facet.field=%s' % quote_plus('{!key=cat}category') in raw_query)
+            self.assertTrue('facet.field=%s' % quote_plus('{!ex=cat key=cat_ex}category') in raw_query)
+
+            r = q.results
+
+            cat_facet = r.get_facet_field('cat')
+            self.assertEqual(len(cat_facet.values), 5)
+            self.assertEqual(cat_facet.values[0].value, '3540208')
+            self.assertEqual(cat_facet.values[0].count, 19083)
+            self.assertEqual(cat_facet.values[0].instance, (3540208, '3540208 3540208'))
+            self.assertEqual(cat_facet.values[1].value, '1')
+            self.assertEqual(cat_facet.values[1].count, 0)
+            self.assertEqual(cat_facet.values[1].instance, (1, '1 1'))
+            cat_ex_facet = r.get_facet_field('cat_ex')
+            self.assertEqual(len(cat_ex_facet.values), 5)
+            self.assertEqual(cat_ex_facet.values[0].value, '29')
+            self.assertEqual(cat_ex_facet.values[0].count, 147163)
+            self.assertEqual(cat_ex_facet.values[0].instance, (29, '29 29'))
+            self.assertEqual(cat_ex_facet.values[3].value, '3540208')
+            self.assertEqual(cat_ex_facet.values[3].count, 19083)
+            self.assertEqual(cat_ex_facet.values[3].instance, (3540208, '3540208 3540208'))
+            
     def test_facet_pivot(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):
@@ -299,7 +375,7 @@ class QueryTest(TestCase):
             self.assertTrue('f.category.facet.limit=3' in raw_query)
 
             r = q.results
-            facet = r.get_facet_pivot('type', 'category', 'visible')
+            facet = r.get_facet_pivot('tcv')
             self.assertListEqual(facet.fields, ['type', 'category', 'visible'])
             self.assertEqual(facet.field, 'type')
             self.assertEqual(facet.values[0].value, 'B')

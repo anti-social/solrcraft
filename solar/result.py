@@ -44,14 +44,14 @@ class SolrResults(object):
             if st.field == field:
                 return st
         
-    def get_facet_field(self, field):
+    def get_facet_field(self, key):
         for facet in self.facet_fields:
-            if facet.field == field:
+            if facet.key == key:
                 return facet
 
-    def get_facet_pivot(self, *fields):
+    def get_facet_pivot(self, key):
         for facet in self.facet_pivots:
-            if all(starmap(operator.eq, izip_longest(facet.fields, fields))):
+            if facet.key == key:
                 return facet
 
     def _populate_instances(self):

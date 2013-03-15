@@ -7,6 +7,7 @@ class FacetField(object):
     def __init__(self, field, local_params=None, instance_mapper=None, **kwargs):
         self.field = field
         self.local_params = local_params or LocalParams()
+        self.key = self.local_params.get('key', self.field)
         self.facet_params = kwargs
         self.values = []
         self._instance_mapper = instance_mapper
@@ -36,7 +37,7 @@ class FacetField(object):
     def process_data(self, results):
         self.values = []
         raw_facet_fields = results.raw_results.facets['facet_fields']
-        facet_data = raw_facet_fields[self.local_params.get('key', self.field)]
+        facet_data = raw_facet_fields[self.key]
         for i in xrange(0, len(facet_data), 2):
             self.values.append(FacetValue(facet_data[i], facet_data[i+1], facet=self))
 
@@ -105,11 +106,9 @@ class FacetPivot(object):
         self.field = self.fields[0]
         self.name = ','.join(self.fields)
         self.local_params = kwargs.pop('local_params', None) or LocalParams()
+        self.key = self.local_params.get('key', self.name)
         self.facet_pivot_params = kwargs
         self.values = []
-
-    def get_key(self):
-        return self.local_params.get('key', self.name)
 
     def get_params(self):
         params = {}
@@ -129,7 +128,7 @@ class FacetPivot(object):
     
     def process_data(self, results):
         self.values = []
-        raw_pivot = results.raw_results.facets['facet_pivot'][self.get_key()]
+        raw_pivot = results.raw_results.facets['facet_pivot'][self.key]
         self.process_pivot(raw_pivot, self)
 
     def process_pivot(self, raw_pivot, root_pivot):
