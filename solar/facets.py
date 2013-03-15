@@ -4,7 +4,8 @@ from .util import LocalParams, X, make_fq
 
 
 class FacetField(object):
-    def __init__(self, field, local_params=None, instance_mapper=None, **kwargs):
+    def __init__(self, field, local_params=None, instance_mapper=None,
+                 **kwargs):
         self.field = field
         self.local_params = local_params or LocalParams()
         self.key = self.local_params.get('key', self.field)
@@ -39,7 +40,8 @@ class FacetField(object):
         raw_facet_fields = results.raw_results.facets['facet_fields']
         facet_data = raw_facet_fields[self.key]
         for i in xrange(0, len(facet_data), 2):
-            self.values.append(FacetValue(facet_data[i], facet_data[i+1], facet=self))
+            self.values.append(
+                FacetValue(facet_data[i], facet_data[i+1], facet=self))
 
     def _populate_instances(self):
         values = [fv.value for fv in self.values]
@@ -69,6 +71,8 @@ class FacetQuery(object):
     def __init__(self, fq, local_params=None):
         self.fq = fq
         self.local_params = local_params or LocalParams()
+        self.key = self.local_params.get('key',
+                                         make_fq(self.fq, self.local_params))
         self.count = None
 
     def get_params(self):
@@ -79,8 +83,7 @@ class FacetQuery(object):
         
     def process_data(self, results):
         raw_facet_queries = results.raw_results.facets['facet_queries']
-        self.count = raw_facet_queries[
-            self.local_params.get('key', make_fq(self.fq, self.local_params))]
+        self.count = raw_facet_queries[self.key]
 
 
 class FacetPivot(object):
@@ -134,7 +137,8 @@ class FacetPivot(object):
     def process_pivot(self, raw_pivot, root_pivot):
         self.root_pivot = root_pivot
         for facet_data in raw_pivot:
-            fv = FacetValue(facet_data['value'], facet_data['count'], facet=self)
+            fv = FacetValue(
+                facet_data['value'], facet_data['count'], facet=self)
             if 'pivot' in facet_data:
                 fv.pivot = FacetPivot(*self.fields[1:])
                 fv.pivot.process_pivot(facet_data['pivot'], root_pivot)

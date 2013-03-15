@@ -1,5 +1,6 @@
-import operator
-from itertools import chain, izip_longest, starmap
+from itertools import chain
+
+from .util import LocalParams, X, make_fq
 
 
 class SolrResults(object):
@@ -46,6 +47,15 @@ class SolrResults(object):
         
     def get_facet_field(self, key):
         for facet in self.facet_fields:
+            if facet.key == key:
+                return facet
+
+    def get_facet_query(self, key_or_x, local_params=None):
+        if isinstance(key_or_x, X):
+            key = make_fq(key_or_x, LocalParams(local_params))
+        else:
+            key = key_or_x
+        for facet in self.facet_queries:
             if facet.key == key:
                 return facet
 

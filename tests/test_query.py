@@ -217,6 +217,61 @@ class QueryTest(TestCase):
             self.assertEqual(cat_ex_facet.values[3].count, 19083)
             self.assertEqual(cat_ex_facet.values[3].instance, (3540208, '3540208 3540208'))
             
+    def test_facet_field(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 19083,
+    "start": 0,
+    "docs": []
+  },
+  "facet_counts": {
+    "facet_queries": {
+      "{!ex=dt}date_modified:[NOW-1MONTH TO *]": 16184,
+      "dt_year": 16184,
+      "dt_year_ex": 19083,
+      "date_modified:[NOW/DAY TO *]": 135,
+      "dt_week": 6631
+    }
+  }
+}
+'''
+
+            q = s.search()
+            q = q.filter(date_modified__gte='NOW-1MONTH', _local_params={'tag': 'dt'})
+            q = q.facet_query(X(date_modified__gte='NOW/DAY'))
+            q = q.facet_query(X(date_modified__gte='NOW-7DAYS'), _local_params={'key': 'dt_week'})
+            q = q.facet_query(X(date_modified__gte='NOW-1MONTH'), _local_params={'ex': 'dt'})
+            q = q.facet_query(X(date_modified__gte='NOW-1YEAR'), _local_params={'key': 'dt_year'})
+            q = q.facet_query(X(date_modified__gte='NOW-1YEAR'), _local_params={'ex': 'dt', 'key': 'dt_year_ex'})
+
+            raw_query = str(q)
+            
+            self.assertIn('fq=%s' % quote_plus('{!tag=dt}date_modified:[NOW-1MONTH TO *]'), raw_query)
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.query=%s' % quote_plus('date_modified:[NOW/DAY TO *]'), raw_query)
+            self.assertIn('facet.query=%s' % quote_plus('{!key=dt_week}date_modified:[NOW-7DAYS TO *]'), raw_query)
+            self.assertIn('facet.query=%s' % quote_plus('{!ex=dt}date_modified:[NOW-1MONTH TO *]'), raw_query)
+            self.assertIn('facet.query=%s' % quote_plus('{!key=dt_year}date_modified:[NOW-1YEAR TO *]'), raw_query)
+            self.assertIn('facet.query=%s' % quote_plus('{!ex=dt key=dt_year_ex}date_modified:[NOW-1YEAR TO *]'), raw_query)
+
+            r = q.results
+
+            today_facet = r.get_facet_query('date_modified:[NOW/DAY TO *]')
+            self.assertEqual(today_facet.count, 135)
+            today_facet = r.get_facet_query(X(date_modified__gte='NOW/DAY'))
+            self.assertEqual(today_facet.count, 135)
+            week_facet = r.get_facet_query('dt_week')
+            self.assertEqual(week_facet.count, 6631)
+            month_facet = r.get_facet_query(X(date_modified__gte='NOW-1MONTH'), {'ex': 'dt'})
+            self.assertEqual(month_facet.count, 16184)
+            year_facet = r.get_facet_query('dt_year')
+            self.assertEqual(year_facet.count, 16184)
+            year_ex_facet = r.get_facet_query('dt_year_ex')
+            self.assertEqual(year_ex_facet.count, 19083)
+
     def test_facet_pivot(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):
