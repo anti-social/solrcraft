@@ -105,6 +105,7 @@ class FacetPivot(object):
         self.field = self.fields[0]
         self.name = ','.join(self.fields)
         self.local_params = kwargs.pop('local_params', None) or LocalParams()
+        self.facet_pivot_params = kwargs
         self.values = []
 
     def get_key(self):
@@ -114,6 +115,8 @@ class FacetPivot(object):
         params = {}
         params['facet'] = True
         params['facet.pivot'] = [make_fq(X(self.name), self.local_params)]
+        for p, v in self.facet_pivot_params.items():
+            params['facet.pivot.%s' % p] = v
         for field, facet_params in self.facet_params.items():
             for p, v in facet_params.items():
                 params['f.%s.facet.%s' % (field, p)] = v

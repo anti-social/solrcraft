@@ -323,7 +323,7 @@ class SolrQuery(object):
         clone = self._clone()
         local_params = LocalParams(kwargs.pop('_local_params', None))
         clone._facet_pivots.append(
-            FacetPivot(*fields, local_params=local_params))
+            FacetPivot(*fields, local_params=local_params, **kwargs))
         return clone
     
     def group(self, field, _instance_mapper=None,

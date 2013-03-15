@@ -277,7 +277,7 @@ class QueryTest(TestCase):
         {
           "field": "type",
           "value": "S",
-          "count": 1,
+          "count": 3,
           "pivot": []
         }
       ]
@@ -288,12 +288,14 @@ class QueryTest(TestCase):
 
             q = s.search()
             q = q.facet_pivot('type', ('category', _obj_mapper, dict(limit=3)), 'visible',
-                              _local_params=LocalParams(ex='type,category', key='tcv'))
+                              _local_params=LocalParams(ex='type,category', key='tcv'),
+                              mincount=2)
 
             raw_query = str(q)
 
             self.assertTrue('facet=true' in raw_query)
             self.assertTrue('facet.pivot=%s' % quote_plus('{!ex=type,category key=tcv}type,category,visible') in raw_query)
+            self.assertTrue('facet.pivot.mincount=2' in raw_query)
             self.assertTrue('f.category.facet.limit=3' in raw_query)
 
             r = q.results
@@ -320,7 +322,7 @@ class QueryTest(TestCase):
             self.assertEqual(facet.values[1].pivot.get_value('607').pivot.get_value(True).count, 1462)
             self.assertEqual(facet.values[1].pivot.get_value('607').pivot.get_value(False).count, 169)
             self.assertEqual(facet.values[2].value, 'S')
-            self.assertEqual(facet.values[2].count, 1)
+            self.assertEqual(facet.values[2].count, 3)
             self.assertRaises(IndexError, lambda: facet.values[3])
 
     def test_search_grouped_main(self):
