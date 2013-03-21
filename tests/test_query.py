@@ -141,6 +141,64 @@ class QueryTest(TestCase):
             [u"NOT ((status:1 OR status:2 OR status:3))"])
 
 
+    def test_count(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request') as send_request:
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 181,
+    "start": 0,
+    "docs": []
+  }
+}
+'''
+
+            q = s.search()
+            self.assertEqual(q.count(), 181)
+            self.assertEqual(q.count(), 181)
+            self.assertEqual(send_request.call_count, 2)
+
+
+    def test_iter_docs(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request') as send_request:
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 181,
+    "start": 0,
+    "docs": [
+      {
+        "id": "1",
+        "name": "Test 1"
+      },
+      {
+        "id": "2",
+        "name": "Test 2"
+      }
+    ]
+  }
+}
+'''
+
+            canonical_docs = [
+                {"id": "1", "name": "Test 1"},
+                {"id": "2", "name": "Test 2"}
+            ]
+
+            def check_docs(docs, canonical_docs):
+                for doc, canonical_doc in zip(docs, canonical_docs):
+                    self.assertEqual(doc.id, canonical_doc['id'])
+                    self.assertEqual(doc.name, canonical_doc['name'])
+
+            q = s.search()
+            check_docs(q.all(), canonical_docs)
+            check_docs(list(q), canonical_docs)
+            check_docs(iter(q), canonical_docs)
+            self.assertEqual(send_request.call_count, 1)
+
+
     def test_facet_field(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):

@@ -72,11 +72,11 @@ class SolrQuery(object):
 
     def __len__(self):
         results = self._fetch_results()
-        return results.hits
+        return len(results)
 
     def __iter__(self):
         results = self._fetch_results()
-        return iter(results.docs)
+        return iter(results)
 
     def __getitem__(self, k):
         if not isinstance(k, (slice, int, long)):
@@ -212,7 +212,7 @@ class SolrQuery(object):
         return list(self.results)
 
     def count(self):
-        return len(self._clone()._fetch_results(only_count=True))
+        return self._clone()._fetch_results(only_count=True).ndocs
 
     def instances(self):
         return self._clone(InstancesSolrQuery).only('id')

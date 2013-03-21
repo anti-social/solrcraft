@@ -35,6 +35,15 @@ class SolrResults(object):
 
         self.debug_info = self.raw_results.debug
 
+    def __nonzero__(self):
+        return True
+        
+    def __len__(self):
+        return self.ndocs
+
+    def __iter__(self):
+        return iter(self.docs)
+    
     def get_grouped(self, key):
         for grouped in self.groupeds:
             if grouped.field == key:
