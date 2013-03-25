@@ -221,10 +221,11 @@ class Solr(object):
         solr = pysolr.Solr('http://localhost:8983/solr', timeout=10)
 
     """
-    def __init__(self, url, decoder=None, timeout=60):
+    def __init__(self, url, decoder=None, timeout=60, max_get_params_length=1023):
         self.decoder = decoder or json.JSONDecoder()
         self.url = url
         self.timeout = timeout
+        self.max_get_params_length = max_get_params_length
         self.log = self._get_log()
 
     def _get_log(self):
@@ -299,7 +300,7 @@ class Solr(object):
         params['wt'] = 'json'
         params_encoded = safe_urlencode(params, True)
 
-        if len(params_encoded) < 1024:
+        if len(params_encoded) <= self.max_get_params_length:
             # Typical case.
             path = 'select/?%s' % params_encoded
             return self._send_request('get', path)
@@ -391,25 +392,20 @@ class Solr(object):
             import lxml.html
             server_type = 'tomcat'
 
-        # Solr 4 handle errors by itself
-        if content_type.startswith('application/json'):
-            server_type = 'solr4_json'
-
-        if content_type.startswith('application/xml'):
-            server_type = 'solr4_xml'
-
         reason = None
         full_html = ''
         dom_tree = None
 
-        if server_type == 'solr4_json':
-            try:
-                data = json.loads(response)
-                error = data['error']
-                reason = error.get('msg') or error.get('trace')
-            except (ValueError, KeyError):
-                pass
-        elif server_type == 'solr4_xml':
+        # Solr 4.0 json response
+        try:
+            data = json.loads(response)
+            error = data['error']
+            reason = error.get('msg') or error.get('trace')
+        except (ValueError, KeyError):
+            pass
+
+        if reason is None:
+            # Solr 4.0 xml response
             try:
                 tree = ET.fromstring(response)
                 lst_nodes = tree.findall('lst')
@@ -422,7 +418,8 @@ class Solr(object):
                             break
             except SyntaxError, e:
                 pass
-        elif server_type == 'tomcat':
+
+        if reason is None and server_type == 'tomcat':
             # Tomcat doesn't produce a valid XML response
             soup = lxml.html.fromstring(response)
             body_node = soup.find('body')
