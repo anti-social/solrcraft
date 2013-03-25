@@ -16,17 +16,23 @@ def requires():
     return r
 
 setup(
-    name = "solar",
-    version = "0.2.999",
-    requires = requires(),
-    author = "Alexander Koval",
-    author_email = "kovalidis@gmail.com",
-    description = ("A library to use solr in python projects."),
-    license = "BSD",
-    keywords = "solr solar pysolr",
-    url = "https://github.com/anti-social/solar",
+    name="solar",
+    version="0.2.999",
+    author="Alexander Koval",
+    author_email="kovalidis@gmail.com",
+    description=("A library to use solr in python projects."),
+    license="BSD",
+    keywords="solr solar pysolr",
+    url="https://github.com/anti-social/solar",
     packages=find_packages(exclude=["tests.*", "tests"]),
     long_description=read('README.rst'),
+    install_requires=requires(),
+    extras_require={
+        'tomcat': [
+            'lxml',
+            'cssselect',
+        ],
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
