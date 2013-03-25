@@ -10,7 +10,7 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 def requires():
-    r = []
+    r = ['requests>=1.1.0']
     if sys.version_info < (2, 7):
         r.append('ordereddict')
     return r
