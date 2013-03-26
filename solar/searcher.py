@@ -61,8 +61,12 @@ class SolrSearcher(object):
     def search(self, q=None, *args, **kwargs):
         return self.query_cls(self, q, *args, **kwargs)
 
-    def get(self, *args, **kwargs):
-        return self.search().get(*args, **kwargs)
+    def get(self, id=None, ids=None, **kwargs):
+        if ids and hasattr(ids, '__iter__'):
+            ids = ','.join(ids)
+        solr = random.choice(self.solrs_write)
+        raw_results = solr.get(id=id, ids=ids, **kwargs)
+        return [self.document_cls(**raw_doc) for raw_doc in raw_results.docs]
 
     # proxy methods
 
@@ -162,6 +166,13 @@ class CommonSearcher(SolrSearcher):
                 patched_docs.append(doc)
                 
         return super(CommonSearcher, self).add(patched_docs, commit=commit)
+
+    def get(self, id=None, ids=None, **kwargs):
+        if id:
+            id = self.get_unique_value(id)
+        if ids:
+            ids = map(self.get_unique_value, ids)
+        return super(CommonSearcher, self).get(id=id, ids=ids, **kwargs)
 
     def delete(self, *args, **kwargs):
         kwargs = kwargs.copy()
