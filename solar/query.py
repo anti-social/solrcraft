@@ -292,16 +292,19 @@ class SolrQuery(object):
         clone._params[param_name] = value
         return clone
 
-    def facet(self, limit=-1, offset=0, mincount=1, sort=True,
-              missing=False, method='fc'):
+    def facet(self, limit=None, offset=None, mincount=None, sort=None,
+              prefix=None, missing=None, method=None, **kwargs):
         clone = self._clone()
         clone._params['facet'] = True
         clone._params['facet.limit'] = limit
         clone._params['facet.offset'] = offset
         clone._params['facet.mincount'] = mincount
         clone._params['facet.sort'] = sort
+        clone._params['facet.prefix'] = prefix
         clone._params['facet.missing'] = missing
         clone._params['facet.method'] = method
+        for p, v in kwargs.items():
+            clone._params['facet.%s' % p] = v
         return clone
 
     def facet_field(self, field, _local_params=None, _instance_mapper=None, **kwargs):
