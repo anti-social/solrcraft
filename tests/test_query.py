@@ -22,26 +22,26 @@ class QueryTest(TestCase):
         q = SolrSearcher().search().dismax()
         raw_query = str(q)
 
-        self.assertTrue('q=%s' % quote_plus('*:*') in raw_query)
-        self.assertTrue('defType=dismax' in raw_query)
+        self.assertIn('q=%s' % quote_plus('*:*'), raw_query)
+        self.assertIn('defType=dismax', raw_query)
 
         q = SolrSearcher().search('test query').dismax()
         raw_query = str(q)
 
-        self.assertTrue('q=%s' % quote_plus('test query') in raw_query)
-        self.assertTrue('defType=dismax' in raw_query)
+        self.assertIn('q=%s' % quote_plus('test query'), raw_query)
+        self.assertIn('defType=dismax', raw_query)
 
         q = SolrSearcher().search(name='test').dismax()
         raw_query = str(q)
 
-        self.assertTrue('q=%s' % quote_plus('name:test') in raw_query)
-        self.assertTrue('defType=dismax' in raw_query)
+        self.assertIn('q=%s' % quote_plus('name:test'), raw_query)
+        self.assertIn('defType=dismax', raw_query)
 
         q = SolrSearcher().search(name='test').edismax()
         raw_query = str(q)
 
-        self.assertTrue('q=%s' % quote_plus('name:test') in raw_query)
-        self.assertTrue('defType=edismax' in raw_query)
+        self.assertIn('q=%s' % quote_plus('name:test'), raw_query)
+        self.assertIn('defType=edismax', raw_query)
 
         q = (
             SolrSearcher().search(X(name='test') | X(name__startswith='test'))
@@ -52,10 +52,10 @@ class QueryTest(TestCase):
         )
         raw_query = str(q)
         
-        self.assertTrue('q=%s' % quote_plus('(name:test OR name:test*)') in raw_query)
-        self.assertTrue('qf=%s' % quote_plus('name^5 keywords^2') in raw_query)
-        self.assertTrue('bf=%s' % quote_plus('linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)') in raw_query)
-        self.assertTrue('defType=dismax' in raw_query)
+        self.assertIn('q=%s' % quote_plus('(name:test OR name:test*)'), raw_query)
+        self.assertIn('qf=%s' % quote_plus('name^5 keywords^2'), raw_query)
+        self.assertIn('bf=%s' % quote_plus('linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)'), raw_query)
+        self.assertIn('defType=dismax', raw_query)
 
         q = (
             SolrSearcher()
@@ -64,8 +64,8 @@ class QueryTest(TestCase):
         )
         raw_query = str(q)
 
-        self.assertTrue('q=%s' % quote_plus(
-                """{!dismax bf='linear(rank,100,0)' qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}""") in raw_query)
+        self.assertIn('q=%s' % quote_plus(
+                """{!dismax bf='linear(rank,100,0)' qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}"""), raw_query)
 
         q = (
             SolrSearcher()
@@ -77,9 +77,9 @@ class QueryTest(TestCase):
         )
         raw_query = str(q)
 
-        self.assertTrue('q=%s' % quote_plus(
+        self.assertIn('q=%s' % quote_plus(
                 '(_query_:"{!dismax bf=\'linear(rank,100,0)\' qf=\'name^10\' v=nokia}" '
-                'AND _query_:"{!dismax bf=\'linear(rank,100,0)\' qf=description v=\'nokia lumia and\'}")') in raw_query)
+                'AND _query_:"{!dismax bf=\'linear(rank,100,0)\' qf=description v=\'nokia lumia and\'}")'), raw_query)
     
     def test_filter(self):
         q = SolrSearcher().search()
@@ -250,11 +250,11 @@ class QueryTest(TestCase):
 
             raw_query = str(q)
 
-            self.assertTrue('fq=%s' % quote_plus('{!tag=cat}category:3540208') in raw_query)
-            self.assertTrue('facet=true' in raw_query)
-            self.assertTrue('facet.limit=5' in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!key=cat}category') in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!ex=cat key=cat_ex}category') in raw_query)
+            self.assertIn('fq=%s' % quote_plus('{!tag=cat}category:3540208'), raw_query)
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.limit=5', raw_query)
+            self.assertIn('facet.field=%s' % quote_plus('{!key=cat}category'), raw_query)
+            self.assertIn('facet.field=%s' % quote_plus('{!ex=cat key=cat_ex}category'), raw_query)
 
             r = q.results
 
@@ -482,10 +482,10 @@ class QueryTest(TestCase):
 
             raw_query = str(q)
 
-            self.assertTrue('facet=true' in raw_query)
-            self.assertTrue('facet.pivot=%s' % quote_plus('{!ex=type,category key=tcv}type,category,visible') in raw_query)
-            self.assertTrue('facet.pivot.mincount=2' in raw_query)
-            self.assertTrue('f.category.facet.limit=3' in raw_query)
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.pivot=%s' % quote_plus('{!ex=type,category key=tcv}type,category,visible'), raw_query)
+            self.assertIn('facet.pivot.mincount=2', raw_query)
+            self.assertIn('f.category.facet.limit=3', raw_query)
 
             r = q.results
             facet = r.get_facet_pivot('tcv')
@@ -590,22 +590,22 @@ class QueryTest(TestCase):
             q = q.offset(48).limit(24)
             raw_query = str(q)
 
-            self.assertTrue('facet=true' in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!ex=category}category') in raw_query)
-            self.assertTrue('f.category.facet.mincount=5' in raw_query)
-            self.assertTrue('f.category.facet.limit=10' in raw_query)
-            self.assertTrue('facet.field=%s' % quote_plus('{!ex=tag}tag') in raw_query)
-            self.assertTrue('facet.query=%s' % quote_plus('{!ex=price cache=false}price:[* TO 100]') in raw_query)
-            self.assertTrue('group=true' in raw_query)
-            self.assertTrue('group.ngroups=true' in raw_query)
-            self.assertTrue('group.limit=3' in raw_query)
-            self.assertTrue('group.field=company' in raw_query)
-            self.assertTrue('fq=%s' % quote_plus('{!tag=category}category:13') in raw_query)
-            self.assertTrue('stats=true' in raw_query)
-            self.assertTrue('stats.field=price' in raw_query)
-            self.assertTrue('sort=date_created+desc' in raw_query)
-            self.assertTrue('start=48' in raw_query)
-            self.assertTrue('rows=24' in raw_query)
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.field=%s' % quote_plus('{!ex=category}category'), raw_query)
+            self.assertIn('f.category.facet.mincount=5', raw_query)
+            self.assertIn('f.category.facet.limit=10', raw_query)
+            self.assertIn('facet.field=%s' % quote_plus('{!ex=tag}tag'), raw_query)
+            self.assertIn('facet.query=%s' % quote_plus('{!ex=price cache=false}price:[* TO 100]'), raw_query)
+            self.assertIn('group=true', raw_query)
+            self.assertIn('group.ngroups=true', raw_query)
+            self.assertIn('group.limit=3', raw_query)
+            self.assertIn('group.field=company', raw_query)
+            self.assertIn('fq=%s' % quote_plus('{!tag=category}category:13'), raw_query)
+            self.assertIn('stats=true', raw_query)
+            self.assertIn('stats.field=price', raw_query)
+            self.assertIn('sort=date_created+desc', raw_query)
+            self.assertIn('start=48', raw_query)
+            self.assertIn('rows=24', raw_query)
 
             r = q.results
             grouped = r.get_grouped('company')
@@ -688,10 +688,10 @@ class QueryTest(TestCase):
             q = q.group('company', limit=3, format='simple')
             raw_query = str(q)
 
-            self.assertTrue('group=true' in raw_query)
-            self.assertTrue('group.limit=3' in raw_query)
-            self.assertTrue('group.format=simple' in raw_query)
-            self.assertTrue('group.field=company' in raw_query)
+            self.assertIn('group=true', raw_query)
+            self.assertIn('group.limit=3', raw_query)
+            self.assertIn('group.format=simple', raw_query)
+            self.assertIn('group.field=company', raw_query)
 
             r = q.results
             grouped = r.get_grouped('company')
@@ -787,10 +787,10 @@ class QueryTest(TestCase):
 
             raw_query = str(q)
 
-            self.assertTrue('stats=true' in raw_query)
-            self.assertTrue('stats.field=price' in raw_query)
-            self.assertTrue('f.price.stats.facet=visible' in raw_query)
-            self.assertTrue('f.price.stats.facet=category' in raw_query)
+            self.assertIn('stats=true', raw_query)
+            self.assertIn('stats.field=price', raw_query)
+            self.assertIn('f.price.stats.facet=visible', raw_query)
+            self.assertIn('f.price.stats.facet=category', raw_query)
 
             r = q.results
             s = r.get_stats_field('price')

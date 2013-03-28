@@ -112,8 +112,8 @@ class UtilTest(TestCase):
         lp.update(LocalParams(qf='name^10 description'))
         lp.add('pf', 'name')
         lp.add('ps', 2)
-        self.assertTrue('type' in lp)
-        self.assertTrue('v' in lp)
+        self.assertIn('type', lp)
+        self.assertIn('v', lp)
         self.assertFalse('q' in lp)
         self.assertEqual(lp['type'], 'dismax')
         self.assertEqual(
