@@ -1,5 +1,7 @@
 # -*- encoding: utf-8 -*-
 
+from .pysolr import force_unicode
+
 
 # http://wiki.apache.org/solr/FunctionQuery/
 SOLR_FUNCTIONS = [
@@ -44,7 +46,7 @@ class Function(object):
         parts.append(
             '%s(%s)%s' % (
                 self.name,
-                ','.join(unicode(a) for a in self.args),
+                ','.join(force_unicode(a) for a in self.args),
                 weight
                 )
             )

@@ -1,7 +1,10 @@
 #!/usr/bin/env python
-from urllib import quote_plus
 from datetime import datetime
 from unittest import TestCase
+try:
+    from urllib import quote_plus
+except ImportError:
+    from urllib.parse import quote_plus
 
 from mock import patch
 

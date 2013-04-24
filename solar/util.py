@@ -11,6 +11,7 @@ except ImportError:
     from ordereddict import OrderedDict
 
 from .tree import Node
+from .pysolr import IS_PY3, force_unicode
 
 
 CALENDAR_UNITS = ['MILLI', 'MILLISECOND', 'SECOND', 'MINUTE',
@@ -24,10 +25,19 @@ SPECIAL_WORDS = ['AND', 'OR', 'NOT', 'TO']
 # See: http://lucene.apache.org/core/3_6_0/queryparsersyntax.html#Escaping%20Special%20Characters
 SPECIAL_CHARACTERS =  r'\+-&|!(){}[]^"~*?:'
 
-class SafeString(str):
+if IS_PY3:
+    string_types = str,
+    text_type = str
+    binary_type = bytes
+else:
+    string_types = basestring,
+    text_type = unicode
+    binary_type = str
+
+class SafeString(binary_type):
     pass
 
-class SafeUnicode(unicode):
+class SafeUnicode(text_type):
     pass
 
 ALL = SafeUnicode(u'*:*')
@@ -52,14 +62,14 @@ def safe_solr_input(value):
     if isinstance(value, (SafeString, SafeUnicode)):
         return value
 
-    if not isinstance(value, basestring):
-        value = unicode(value)
+    if not isinstance(value, string_types):
+        value = force_unicode(value)
     
     value = process_special_words(value)
 
     value = process_special_characters(value)
 
-    if isinstance(value, unicode):
+    if isinstance(value, text_type):
         return SafeUnicode(value)
     return SafeString(value)
 
@@ -83,7 +93,7 @@ class X(Node):
         #     op = children[0].connector
         #     children = children[0].children
         # super(X, self).__init__(children=children, connector=op)
-        super(X, self).__init__(children=list(args) + kwargs.items(),
+        super(X, self).__init__(children=list(args) + list(kwargs.items()),
                                 connector=op)
 
     def _combine(self, other, conn):
@@ -123,7 +133,7 @@ class LocalParams(OrderedDict):
             other = OrderedDict(other)
         elif hasattr(other, 'keys'):
             other = OrderedDict((k, other[k]) for k in sorted(other.keys()))
-        elif hasattr(other, '__iter__'):
+        elif isinstance(other, (list, tuple)):
             _other = []
             for p in other:
                 if isinstance(p, (list, tuple)):
@@ -155,7 +165,7 @@ class LocalParams(OrderedDict):
         self[key] = value
 
     def _quote(self, value, replace_words=True):
-        value = unicode(value)
+        value = force_unicode(value)
         if replace_words:
             value = process_special_words(value)
         if contains_special_characters(value, self.SPECIAL_CHARACTERS):
@@ -188,13 +198,13 @@ def process_value(v, safe=False):
     if v is False:
         return 'false'
     if isinstance(v, LocalParams):
-        return '"%s"' % unicode(v)
+        return '"%s"' % force_unicode(v)
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
-    if isinstance(v, basestring) and SOLR_DATETIME_RE.match(v):
+    if isinstance(v, string_types) and SOLR_DATETIME_RE.match(v):
         return v
     if safe:
-        return unicode(v)
+        return force_unicode(v)
     return safe_solr_input(v)
 
 def process_field(field, op, value):
@@ -244,10 +254,10 @@ def make_fq(x, local_params=None):
             if child is None:
                 continue
             if isinstance(child, LocalParams):
-                parts = [unicode(child)]
+                parts = [force_unicode(child)]
             elif isinstance(child, tuple):
                 parts = [fq_from_tuple(child)]
-            elif isinstance(child, basestring):
+            elif isinstance(child, string_types):
                 parts = [safe_solr_input(child)]
             else:
                 parts = _make_fq(child, level+1)

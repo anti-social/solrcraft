@@ -1,12 +1,15 @@
 import re
 import sys
 from copy import copy, deepcopy
-import urllib
+try:
+    from urllib import urlencode, quote_plus
+except ImportError:
+    from urllib.parse import urlencode, quote_plus
 import logging
 import warnings
 from itertools import chain
 
-from pysolr import SolrError
+from .pysolr import SolrError, force_unicode
 
 from .result import SolrResults
 from .stats import Stats
@@ -56,19 +59,19 @@ class SolrQuery(object):
         self._result_cache = None
 
     def __unicode__(self):
-        return urllib.unquote_plus(str(self)).decode('utf-8')
+        return unquote_plus(str(self)).decode('utf-8')
 
     def __str__(self):
         params = self._prepare_params()
         p = []
         p.append(('q', self._make_q().encode('utf-8')))
         for k, v in params.items():
-            if hasattr(v, '__iter__'):
+            if isinstance(v, (list, tuple)):
                 for w in v:
                     p.append((k, w))
             else:
                 p.append((k, v))
-        return urllib.urlencode(p, True)
+        return urlencode(p, True)
 
     def __len__(self):
         results = self._fetch_results()
@@ -79,7 +82,7 @@ class SolrQuery(object):
         return iter(results)
 
     def __getitem__(self, k):
-        if not isinstance(k, (slice, int, long)):
+        if not isinstance(k, (slice, int)):
             raise TypeError
 
         if self._result_cache is not None:
@@ -121,7 +124,7 @@ class SolrQuery(object):
             if isinstance(val, tuple):
                 prepared_params[key] = ','.join(val)
             elif isinstance(val, bool):
-                prepared_params[key] = unicode(val).lower()
+                prepared_params[key] = force_unicode(val).lower()
             elif val is None:
                 pass
             else:
@@ -131,7 +134,7 @@ class SolrQuery(object):
     def _modify_params(self, params, only_count=False):
         def merge_params(params, merged_params):
             for p, v in merged_params.items():
-                if hasattr(v, '__iter__'):
+                if isinstance(v, (list, tuple)):
                     params.setdefault(p, []).extend(v)
                 else:
                     params[p] = v
@@ -199,9 +202,9 @@ class SolrQuery(object):
     def results(self):
         try:
             return self._fetch_results()
-        except AttributeError, e:
+        except AttributeError as e:
             # catch AttributeError cause else __getattr__ will be called
-            raise RuntimeError(e.__class__.__name__, *e.args), None, sys.exc_info()[2]
+            raise RuntimeError.with_traceback(e.__class__.__name__, *e.args)
 
     def search(self, q):
         clone = self._clone()

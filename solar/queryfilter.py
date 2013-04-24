@@ -64,7 +64,7 @@ class QueryFilter(object):
         return query
 
     def add_filter(self, filter):
-        if isinstance(filter, basestring):
+        if not isinstance(filter, Filter):
             filter = Filter(filter)
         if filter.name in self.filter_names:
             return
@@ -369,7 +369,7 @@ class OrderingValue(object):
             self.direction = self.DESC
         else:
             self.direction = self.ASC
-        if isinstance(fields, basestring):
+        if not isinstance(fields, (list, tuple)):
             self.fields = [fields]
         else:
             self.fields = fields

@@ -1,6 +1,6 @@
-from searcher import SolrSearcher, CommonSearcher
-from query import SolrQuery, SolrError
-from util import X, LocalParams
+from .searcher import SolrSearcher, CommonSearcher
+from .query import SolrQuery, SolrError
+from .util import X, LocalParams
 
 
 __version__ = (0, 2, 999, 'alpha')

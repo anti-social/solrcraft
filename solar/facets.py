@@ -39,7 +39,7 @@ class FacetField(object):
         self.values = []
         raw_facet_fields = results.raw_results.facets['facet_fields']
         facet_data = raw_facet_fields[self.key]
-        for i in xrange(0, len(facet_data), 2):
+        for i in range(0, len(facet_data), 2):
             self.values.append(
                 FacetValue(facet_data[i], facet_data[i+1], facet=self))
 

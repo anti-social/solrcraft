@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 from datetime import datetime
-from urllib import quote_plus
+try:
+    from urllib import quote_plus
+except ImportError:
+    from urllib.parse import quote_plus
 from unittest import TestCase
 from collections import namedtuple
 

@@ -35,8 +35,9 @@ class SolrResults(object):
 
         self.debug_info = self.raw_results.debug
 
-    def __nonzero__(self):
+    def __bool__(self):
         return True
+    __nonzero__ = __bool__
         
     def __len__(self):
         return self.ndocs

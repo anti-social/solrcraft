@@ -15,29 +15,29 @@ class UtilTest(TestCase):
                          '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:')
     
     def test_X(self):
-        self.assertEqual(unicode(X(status=0)),
+        self.assertEqual(str(X(status=0)),
                          u"(AND: ('status', 0))")
-        self.assertEqual(unicode(X(status=0) & X(company_status__in=[0,6])),
+        self.assertEqual(str(X(status=0) & X(company_status__in=[0,6])),
                          u"(AND: ('status', 0), ('company_status__in', [0, 6]))")
-        self.assertEqual(unicode(X(status=0) | X(company_status=0)),
+        self.assertEqual(str(X(status=0) | X(company_status=0)),
                          u"(OR: ('status', 0), ('company_status', 0))")
-        self.assertEqual(unicode(X(with_photo=True)),
+        self.assertEqual(str(X(with_photo=True)),
                          u"(AND: ('with_photo', True))")
-        self.assertEqual(unicode(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
+        self.assertEqual(str(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
                          u"(AND: ('date_created__gt', datetime.datetime(2012, 5, 17, 14, 35, 41, 794880)))")
-        self.assertEqual(unicode(X(price__lt=1000)),
+        self.assertEqual(str(X(price__lt=1000)),
                          u"(AND: ('price__lt', 1000))")
-        self.assertEqual(unicode(X(price__gte=100) & X(price__lte=1000)),
+        self.assertEqual(str(X(price__gte=100) & X(price__lte=1000)),
                          u"(AND: ('price__gte', 100), ('price__lte', 1000))")
-        self.assertEqual(unicode(X(price__between=[500, 1000])),
+        self.assertEqual(str(X(price__between=[500, 1000])),
                          u"(AND: ('price__between', [500, 1000]))")
-        self.assertEqual(unicode(X(price__range=[2, 10])),
+        self.assertEqual(str(X(price__range=[2, 10])),
                          u"(AND: ('price__range', [2, 10]))")
-        self.assertEqual(unicode(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
+        self.assertEqual(str(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
                          u"(AND: ('category__in', [1, 2, 3, 4, 5]), (OR: ('status', 0), ('status', 5), (AND: ('status', 1), ('company_status', 6))))")
-        self.assertEqual(unicode(~X(status=1)),
+        self.assertEqual(str(~X(status=1)),
                          u"(AND: (NOT (AND: ('status', 1))))")
-        self.assertEqual(unicode(~X(status__in=[1, 2, 3])),
+        self.assertEqual(str(~X(status__in=[1, 2, 3])),
                          u"(AND: (NOT (AND: ('status__in', [1, 2, 3]))))")
     
     def test_make_fq(self):

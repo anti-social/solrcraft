@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import random
 
-from pysolr import Solr
+from .pysolr import Solr
 
 from .query import SolrQuery
 from .util import SafeUnicode, X, make_q
