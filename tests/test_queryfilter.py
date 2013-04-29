@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+from __future__ import unicode_literals
+
 from datetime import datetime
 from unittest import TestCase
 try:
@@ -150,7 +151,7 @@ class QueryTest(TestCase):
                 self.assertEqual(category_filter.all_values[0].value, '100')
                 self.assertEqual(category_filter.all_values[0].count, 500)
                 self.assertEqual(category_filter.all_values[0].selected, False)
-                self.assertEqual(category_filter.all_values[0].title, u'100')
+                self.assertEqual(category_filter.all_values[0].title, '100')
                 self.assertEqual(category_filter.all_values[1].value, '5')
                 self.assertEqual(category_filter.all_values[1].count, 10)
                 self.assertEqual(category_filter.all_values[1].selected, True)
@@ -188,8 +189,3 @@ class QueryTest(TestCase):
                 ordering_filter = qf.ordering_filter
                 self.assertEqual(ordering_filter.get_value('-price').selected, True)
                 self.assertEqual(ordering_filter.get_value('-price').direction, OrderingValue.DESC)
-            
-
-if __name__ == '__main__':
-    from unittest import main
-    main()

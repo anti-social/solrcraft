@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from unittest import TestCase
 
 from mock import patch
@@ -127,4 +129,3 @@ class FlaskPaginationTest(TestCase):
             self.assertEqual(p.prev_num, 28)
 
             self.assertEqual(send_request.call_count, 1)
-

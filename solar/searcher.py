@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+from __future__ import unicode_literals
+
 import random
 
 from .pysolr import Solr
-
 from .query import SolrQuery
 from .util import SafeUnicode, X, make_q
 from .grouped import Group

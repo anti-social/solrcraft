@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import unicode_literals
+
 from datetime import datetime
 from unittest import TestCase
 
@@ -16,65 +18,65 @@ class UtilTest(TestCase):
     
     def test_X(self):
         self.assertEqual(str(X(status=0)),
-                         u"(AND: ('status', 0))")
+                         "(AND: ('status', 0))")
         self.assertEqual(str(X(status=0) & X(company_status__in=[0,6])),
-                         u"(AND: ('status', 0), ('company_status__in', [0, 6]))")
+                         "(AND: ('status', 0), ('company_status__in', [0, 6]))")
         self.assertEqual(str(X(status=0) | X(company_status=0)),
-                         u"(OR: ('status', 0), ('company_status', 0))")
+                         "(OR: ('status', 0), ('company_status', 0))")
         self.assertEqual(str(X(with_photo=True)),
-                         u"(AND: ('with_photo', True))")
+                         "(AND: ('with_photo', True))")
         self.assertEqual(str(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
-                         u"(AND: ('date_created__gt', datetime.datetime(2012, 5, 17, 14, 35, 41, 794880)))")
+                         "(AND: ('date_created__gt', datetime.datetime(2012, 5, 17, 14, 35, 41, 794880)))")
         self.assertEqual(str(X(price__lt=1000)),
-                         u"(AND: ('price__lt', 1000))")
+                         "(AND: ('price__lt', 1000))")
         self.assertEqual(str(X(price__gte=100) & X(price__lte=1000)),
-                         u"(AND: ('price__gte', 100), ('price__lte', 1000))")
+                         "(AND: ('price__gte', 100), ('price__lte', 1000))")
         self.assertEqual(str(X(price__between=[500, 1000])),
-                         u"(AND: ('price__between', [500, 1000]))")
+                         "(AND: ('price__between', [500, 1000]))")
         self.assertEqual(str(X(price__range=[2, 10])),
-                         u"(AND: ('price__range', [2, 10]))")
+                         "(AND: ('price__range', [2, 10]))")
         self.assertEqual(str(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
-                         u"(AND: ('category__in', [1, 2, 3, 4, 5]), (OR: ('status', 0), ('status', 5), (AND: ('status', 1), ('company_status', 6))))")
+                         "(AND: ('category__in', [1, 2, 3, 4, 5]), (OR: ('status', 0), ('status', 5), (AND: ('status', 1), ('company_status', 6))))")
         self.assertEqual(str(~X(status=1)),
-                         u"(AND: (NOT (AND: ('status', 1))))")
+                         "(AND: (NOT (AND: ('status', 1))))")
         self.assertEqual(str(~X(status__in=[1, 2, 3])),
-                         u"(AND: (NOT (AND: ('status__in', [1, 2, 3]))))")
+                         "(AND: (NOT (AND: ('status__in', [1, 2, 3]))))")
     
     def test_make_fq(self):
         self.assertEqual(make_fq(X(status=0)),
-                         u"status:0")
+                         "status:0")
         self.assertEqual(make_fq(X(status=0) & X(company_status__in=[0,6])),
-                         u"status:0 AND (company_status:0 OR company_status:6)")
+                         "status:0 AND (company_status:0 OR company_status:6)")
         self.assertEqual(make_fq(X(status=0) | X(company_status=0)),
-                         u"(status:0 OR company_status:0)")
+                         "(status:0 OR company_status:0)")
         self.assertEqual(make_fq(X(manufacturer__exact='Chuck Norris')),
-                         u'manufacturer:"Chuck Norris"')
+                         'manufacturer:"Chuck Norris"')
         self.assertEqual(make_fq(X(with_photo=True)),
-                         u"with_photo:true")
+                         "with_photo:true")
         self.assertEqual(make_fq(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
-                         u"date_created:{2012-05-17T14:35:41Z TO *}")
+                         "date_created:{2012-05-17T14:35:41Z TO *}")
         self.assertEqual(make_fq(X(price__lt=1000)),
-                         u"price:{* TO 1000}")
+                         "price:{* TO 1000}")
         self.assertEqual(make_fq(X(price__gte=100) & X(price__lte=1000)),
-                         u"price:[100 TO *] AND price:[* TO 1000]")
+                         "price:[100 TO *] AND price:[* TO 1000]")
         self.assertEqual(make_fq(X(price__between=[500, 1000])),
-                         u"price:{500 TO 1000}")
+                         "price:{500 TO 1000}")
         self.assertEqual(make_fq(X(price__range=[2, 10])),
-                         u"price:[2 TO 10]")
+                         "price:[2 TO 10]")
         self.assertEqual(make_fq(X(category__in=[1, 2, 3, 4, 5]) & (X(status=0) | X(status=5) | X(status=1) & X(company_status=6))),
-                         u"(category:1 OR category:2 OR category:3 OR category:4 OR category:5) AND (status:0 OR status:5 OR (status:1 AND company_status:6))")
+                         "(category:1 OR category:2 OR category:3 OR category:4 OR category:5) AND (status:0 OR status:5 OR (status:1 AND company_status:6))")
         self.assertEqual(make_fq(~X(status=1)),
-                         u"NOT (status:1)")
+                         "NOT (status:1)")
         self.assertEqual(make_fq(~X(status__in=[1, 2, 3])),
-                         u"NOT ((status:1 OR status:2 OR status:3))")
-        self.assertEqual(make_fq(X(u"status:0 OR status:1")),
-                         u"status\\:0 or status\\:1")
-        self.assertEqual(make_fq(X(SafeUnicode(u"status:0 OR status:1"))),
-                         u"status:0 OR status:1")
-        self.assertEqual(make_fq(X(status=SafeUnicode(u'"0"'))),
-                         u'status:"0"')
-        self.assertEqual(make_fq(X(LocalParams('dismax', qf='name', v=X(u'nokia lumia')))),
-                         u"{!dismax qf=name v='nokia lumia'}")
+                         "NOT ((status:1 OR status:2 OR status:3))")
+        self.assertEqual(make_fq(X("status:0 OR status:1")),
+                         "status\\:0 or status\\:1")
+        self.assertEqual(make_fq(X(SafeUnicode("status:0 OR status:1"))),
+                         "status:0 OR status:1")
+        self.assertEqual(make_fq(X(status=SafeUnicode('"0"'))),
+                         'status:"0"')
+        self.assertEqual(make_fq(X(LocalParams('dismax', qf='name', v=X('nokia lumia')))),
+                         "{!dismax qf=name v='nokia lumia'}")
 
     def test_local_params(self):
         self.assertEqual(str(LocalParams({'cache': False})),
@@ -105,7 +107,7 @@ class UtilTest(TestCase):
         
         self.assertEqual(
             str(LocalParams('dismax', qf='name',
-                            v=X(SafeUnicode(u'"nokia lumia"')) | X(SafeUnicode(u'"nokia n900"')))),
+                            v=X(SafeUnicode('"nokia lumia"')) | X(SafeUnicode('"nokia n900"')))),
             """{!dismax qf=name v='(\\"nokia lumia\\" OR \\"nokia n900\\")'}""")
 
         lp = LocalParams('dismax', bf=func.linear('rank', 100, 0), v='$q1')
@@ -119,8 +121,3 @@ class UtilTest(TestCase):
         self.assertEqual(
             str(lp),
             "{!dismax bf='linear(rank,100,0)' v=$q1 qf='name^10 description' pf=name ps=2}")
-    
-                 
-if __name__ == '__main__':
-    from unittest import main
-    main()

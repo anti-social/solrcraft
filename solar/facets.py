@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from copy import deepcopy
 
 from .util import LocalParams, X, make_fq

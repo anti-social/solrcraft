@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+from __future__ import unicode_literals
+
 from unittest import TestCase
 
 from solar import func

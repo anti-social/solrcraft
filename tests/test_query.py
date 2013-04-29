@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+from __future__ import unicode_literals
+
 from datetime import datetime
 try:
     from urllib import quote_plus
@@ -63,7 +64,7 @@ class QueryTest(TestCase):
         q = (
             SolrSearcher()
             .search(LocalParams('dismax', bf=func.linear('rank', 100, 0),
-                                qf='name', v=X(SafeUnicode(u'"nokia lumia"')) | X(SafeUnicode(u'"nokia n900"'))))
+                                qf='name', v=X(SafeUnicode('"nokia lumia"')) | X(SafeUnicode('"nokia n900"'))))
         )
         raw_query = str(q)
 
@@ -74,9 +75,9 @@ class QueryTest(TestCase):
             SolrSearcher()
             .search(
                 X(_query_=LocalParams('dismax', bf=func.linear('rank', 100, 0),
-                                      qf='name^10', v=u'nokia'))
+                                      qf='name^10', v='nokia'))
                 & X(_query_=LocalParams('dismax', bf=func.linear('rank', 100, 0),
-                                        qf='description', v=u'nokia lumia AND')))
+                                        qf='description', v='nokia lumia AND')))
         )
         raw_query = str(q)
 
@@ -89,59 +90,59 @@ class QueryTest(TestCase):
 
         self.assertSequenceEqual(
             q.filter(status=0)._prepare_params()['fq'],
-            [u"status:0"])
+            ["status:0"])
         self.assertSequenceEqual(
             q.filter(status=0).filter(company_status__in=[0, 6])._prepare_params()['fq'],
-            [u"status:0", u"(company_status:0 OR company_status:6)"])
+            ["status:0", "(company_status:0 OR company_status:6)"])
         self.assertSequenceEqual(
             q.filter(X(status=0), X(company_status=0), _op='OR')._prepare_params()['fq'],
-            [u"(status:0 OR company_status:0)"])
+            ["(status:0 OR company_status:0)"])
         self.assertSequenceEqual(
             q.filter(with_photo=True)._prepare_params()['fq'],
-            [u"with_photo:true"])
+            ["with_photo:true"])
         self.assertSequenceEqual(
             q.filter(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))._prepare_params()['fq'],
-            [u"date_created:{2012-05-17T14:35:41Z TO *}"])
+            ["date_created:{2012-05-17T14:35:41Z TO *}"])
         self.assertSequenceEqual(
             q.filter(price__lt=1000)._prepare_params()['fq'],
-            [u"price:{* TO 1000}"])
+            ["price:{* TO 1000}"])
         self.assertSequenceEqual(
             q.filter(X(price__lte=100), X(price__gte=1000))._prepare_params()['fq'],
-            [u"price:[* TO 100] AND price:[1000 TO *]"])
+            ["price:[* TO 100] AND price:[1000 TO *]"])
         self.assertSequenceEqual(
             q.filter(price__between=[500, 1000], _local_params=[('cache', False), ('cost', 50)]) \
                 ._prepare_params()['fq'],
-            [u"{!cache=false cost=50}price:{500 TO 1000}"])
+            ["{!cache=false cost=50}price:{500 TO 1000}"])
         self.assertSequenceEqual(
             q.filter(price=None)._prepare_params()['fq'],
-            [u"NOT price:[* TO *]"])
+            ["NOT price:[* TO *]"])
         self.assertSequenceEqual(
             q.exclude(price=None)._prepare_params()['fq'],
-            [u"NOT (NOT price:[* TO *])"])
+            ["NOT (NOT price:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(price__isnull=True)._prepare_params()['fq'],
-            [u"NOT price:[* TO *]"])
+            ["NOT price:[* TO *]"])
         self.assertSequenceEqual(
             q.filter(X(genre='Comedy') & ~X(genre='Drama'))._prepare_params()['fq'],
-            [u"(genre:Comedy AND NOT (genre:Drama))"])
+            ["(genre:Comedy AND NOT (genre:Drama))"])
         self.assertSequenceEqual(
             q.filter(price__isnull=False)._prepare_params()['fq'],
-            [u"price:[* TO *]"])
+            ["price:[* TO *]"])
         self.assertSequenceEqual(
             q.filter(category__in=[])._prepare_params()['fq'],
-            [u"(category:[* TO *] AND NOT category:[* TO *])"])
+            ["(category:[* TO *] AND NOT category:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(X(category__in=[1, 2, 3, 4, 5]), _local_params={'tag': 'category'}) \
                 .filter(X(status=0) | X(status=5) | X(status=1) \
                             & X(company_status=6))._prepare_params()['fq'],
-            [u"{!tag=category}(category:1 OR category:2 OR category:3 OR category:4 OR category:5)",
-             u"(status:0 OR status:5 OR (status:1 AND company_status:6))"])
+            ["{!tag=category}(category:1 OR category:2 OR category:3 OR category:4 OR category:5)",
+             "(status:0 OR status:5 OR (status:1 AND company_status:6))"])
         self.assertSequenceEqual(
             q.exclude(status=1)._prepare_params()['fq'],
-            [u"NOT (status:1)"])
+            ["NOT (status:1)"])
         self.assertSequenceEqual(
             q.exclude(status__in=[1, 2, 3])._prepare_params()['fq'],
-            [u"NOT ((status:1 OR status:2 OR status:3))"])
+            ["NOT ((status:1 OR status:2 OR status:3))"])
 
 
     def test_count(self):
@@ -838,8 +839,3 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(category_facet.get_value('66').stddev, 0.)
             self.assertEqual(category_facet.get_value('66').instance.id, 66)
             self.assertEqual(category_facet.get_value('66').instance.name, '66 66')
-            
-
-if __name__ == '__main__':
-    from unittest import main
-    main()

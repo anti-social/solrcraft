@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
     
 class Document(object):
     def __init__(self, _results=None, **raw_doc):

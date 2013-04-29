@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 
 import re
 import urllib
@@ -40,7 +41,7 @@ class SafeString(binary_type):
 class SafeUnicode(text_type):
     pass
 
-ALL = SafeUnicode(u'*:*')
+ALL = SafeUnicode('*:*')
 
 def process_special_words(value, words=None):
     words = words or SPECIAL_WORDS
