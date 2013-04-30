@@ -57,7 +57,7 @@ class Function(object):
         return ' '.join(parts)
 
 def function_factory(cls_name, name):
-    return type(cls_name, (Function,), {'name': name})
+    return type(str(cls_name), (Function,), {'name': name})
     
 for _func_name in SOLR_FUNCTIONS:
     if isinstance(_func_name, tuple):
