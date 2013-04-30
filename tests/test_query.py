@@ -839,3 +839,39 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(category_facet.get_value('66').stddev, 0.)
             self.assertEqual(category_facet.get_value('66').instance.id, 66)
             self.assertEqual(category_facet.get_value('66').instance.name, '66 66')
+
+        # empty stats
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 0,
+    "start": 0,
+    "docs": []
+  },
+  "stats": {
+    "stats_fields": {
+      "price": null
+    }
+  }
+}'''
+
+            q = s.search().stats('price')
+
+            raw_query = str(q)
+
+            self.assertIn('stats=true', raw_query)
+            self.assertIn('stats.field=price', raw_query)
+
+            r = q.results
+            s = r.get_stats_field('price')
+            self.assertEqual(s.count, None)
+            self.assertEqual(s.missing, None)
+            self.assertAlmostEqual(s.min, None)
+            self.assertAlmostEqual(s.max, None)
+            self.assertAlmostEqual(s.sum, None)
+            self.assertAlmostEqual(s.sum_of_squares, None)
+            self.assertAlmostEqual(s.mean, None)
+            self.assertAlmostEqual(s.stddev, None)
+            

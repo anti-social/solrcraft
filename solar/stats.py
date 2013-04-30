@@ -1,6 +1,16 @@
 from __future__ import unicode_literals
 
 
+def maybe_float(v):
+    if v is not None:
+        return float(v)
+
+
+def maybe_int(v):
+    if v is not None:
+        return int(v)
+
+
 class StatsMixin(object):
     def __init__(self):
         self.min = None
@@ -13,14 +23,14 @@ class StatsMixin(object):
         self.stddev = None
 
     def _process_data(self, raw_stats):
-        self.min = float(raw_stats['min'])
-        self.max = float(raw_stats['max'])
-        self.sum = float(raw_stats['sum'])
-        self.count = int(raw_stats['count'])
-        self.missing = int(raw_stats['missing'])
-        self.sum_of_squares = float(raw_stats['sumOfSquares'])
-        self.mean = float(raw_stats['mean'])
-        self.stddev = float(raw_stats['stddev'])
+        self.min = maybe_float(raw_stats.get('min'))
+        self.max = maybe_float(raw_stats.get('max'))
+        self.sum = maybe_float(raw_stats.get('sum'))
+        self.count = maybe_int(raw_stats.get('count'))
+        self.missing = maybe_int(raw_stats.get('missing'))
+        self.sum_of_squares = maybe_float(raw_stats.get('sumOfSquares'))
+        self.mean = maybe_float(raw_stats.get('mean'))
+        self.stddev = maybe_float(raw_stats.get('stddev'))
 
 
 class Stats(StatsMixin):
@@ -46,7 +56,7 @@ class Stats(StatsMixin):
         return params
 
     def process_data(self, results):
-        raw_stats = results.raw_results.stats['stats_fields'][self.field]
+        raw_stats = results.raw_results.stats.get('stats_fields', {}).get(self.field) or {}
         for facet in self.facets:
             facet.process_data(raw_stats['facets'])
         self._process_data(raw_stats)
