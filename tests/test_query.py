@@ -875,3 +875,12 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(s.mean, None)
             self.assertAlmostEqual(s.stddev, None)
             
+    def test_results_exc(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        q = s.search().stats('price')
+        with patch.object(q, '_fetch_results') as _fetch_results:
+            _fetch_results.side_effect = AttributeError('no such attribute')
+
+            with self.assertRaises(RuntimeError) as cm:
+                q.results
+            self.assertEqual(cm.exception.args, ('AttributeError', 'no such attribute'))
