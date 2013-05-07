@@ -331,9 +331,10 @@ class RangeFilter(Filter):
     fq_connector = X.AND
     
     def __init__(self, name, field=None, coerce=int,
-                 gather_stats=False, **kwargs):
+                 gather_stats=False, exclude_filter=True, **kwargs):
         super(RangeFilter, self).__init__(name, field, coerce=coerce, **kwargs)
         self.gather_stats = gather_stats
+        self.exclude_filter = exclude_filter
         self.from_value = None
         self.to_value = None
         self.stats = None
@@ -348,16 +349,26 @@ class RangeFilter(Filter):
                 self.to_value = v
         
         query = super(RangeFilter, self).apply(query, params)
+        if self.gather_stats and not self.exclude_filter:
+            query = query.stats(self.field)
         return query
 
     def process_results(self, results, params):
         if self.gather_stats:
-            stats_query = results.searcher.search(results.query._q)
-            stats_query._fq = deepcopy(results.query._fq)
-            stats_query = stats_query.stats(self.field).limit(0)
-            self.stats = stats_query.results.get_stats_field(self.field)
-            self.min = self.stats.min
-            self.max = self.stats.max
+            if self.exclude_filter:
+                stats_query = results.searcher.search(results.query._q)
+                stats_query._fq = deepcopy(results.query._fq)
+                stats_query = stats_query.stats(self.field).limit(0)
+                self.process_stats(
+                    stats_query.results.get_stats_field(self.field))
+            else:
+                self.process_stats(results.get_stats_field(self.field))
+
+    def process_stats(self, stats):
+        self.stats = stats
+        self.min = self.stats.min
+        self.max = self.stats.max
+
 
 class OrderingValue(object):
     ASC = 'asc'
