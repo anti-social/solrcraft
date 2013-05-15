@@ -2,6 +2,7 @@
 from datetime import datetime
 from urllib import quote_plus
 from unittest import TestCase
+from collections import namedtuple
 
 from mock import patch
 
@@ -10,6 +11,12 @@ from solar.util import SafeUnicode, X, LocalParams, make_fq
 from solar import func
 
 
+Obj = namedtuple('Obj', ['id', 'name'])
+
+def _obj_mapper(ids):
+    return dict((id, Obj(int(id), '{} {}'.format(id, id))) for id in ids)
+
+    
 class QueryTest(TestCase):
     def test_query(self):
         q = SolrSearcher().search().dismax()
@@ -301,7 +308,173 @@ class QueryTest(TestCase):
             self.assertEqual(r.docs[3].id, '555')
             self.assertEqual(r.docs[3].name, 'Test 5')
 
+    def test_stats(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 56,
+    "start": 0,
+    "docs": []
+  },
+  "stats": {
+    "stats_fields": {
+      "price": {
+        "min": 1,
+        "max": 5358,
+        "count": 14,
+        "missing": 5,
+        "sum": 27999.20001220703,
+        "sumOfSquares": 84656303.06075683,
+        "mean": 1999.942858014788,
+        "stddev": 1484.7818530839374,
+        "facets": {
+          "visible": {
+            "true": {
+              "min": 1,
+              "max": 5358,
+              "count": 14,
+              "missing": 5,
+              "sum": 27999.20001220703,
+              "sumOfSquares": 84656303.06075683,
+              "mean": 1999.942858014788,
+              "stddev": 1484.7818530839374,
+              "facets": {}
+            }
+          },
+          "category": {
+            "11": {
+              "min": 1,
+              "max": 1,
+              "count": 1,
+              "missing": 0,
+              "sum": 1,
+              "sumOfSquares": 1,
+              "mean": 1,
+              "stddev": 0,
+              "facets": {}
+            },
+            "21": {
+              "min": 99,
+              "max": 5358,
+              "count": 13,
+              "missing": 5,
+              "sum": 27998.20001220703,
+              "sumOfSquares": 84656302.06075683,
+              "mean": 2153.707693246695,
+              "stddev": 1424.674328206475,
+              "facets": {}
+            },
+            "66": {
+              "min": "Infinity",
+              "max": "-Infinity",
+              "count": 0,
+              "missing": 1,
+              "sum": 0,
+              "sumOfSquares": 0,
+              "mean": "NaN",
+              "stddev": 0,
+              "facets": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}'''
 
+            q = (
+                s.search()
+                .stats('price', facet_fields=['visible', ('category', _obj_mapper)]))
+
+            raw_query = str(q)
+
+            self.assertIn('stats=true', raw_query)
+            self.assertIn('stats.field=price', raw_query)
+            self.assertIn('f.price.stats.facet=visible', raw_query)
+            self.assertIn('f.price.stats.facet=category', raw_query)
+
+            r = q.results
+            s = r.get_stats_field('price')
+            self.assertEqual(s.count, 14)
+            self.assertEqual(s.missing, 5)
+            self.assertAlmostEqual(s.min, 1.)
+            self.assertAlmostEqual(s.max, 5358.)
+            self.assertAlmostEqual(s.sum, 27999.20001220703)
+            self.assertAlmostEqual(s.sum_of_squares, 84656303.06075683)
+            self.assertAlmostEqual(s.mean, 1999.942858014788)
+            self.assertAlmostEqual(s.stddev, 1484.7818530839374)
+
+            visible_facet = s.get_facet('visible')
+            self.assertEqual(visible_facet.get_value('true').count, 14)
+            self.assertEqual(visible_facet.get_value('true').missing, 5)
+            self.assertAlmostEqual(visible_facet.get_value('true').min, 1.)
+            self.assertAlmostEqual(visible_facet.get_value('true').max, 5358.)
+            self.assertEqual(visible_facet.get_value('true').instance, None)
+
+            category_facet = s.get_facet('category')
+            self.assertEqual(category_facet.get_value('11').count, 1)
+            self.assertEqual(category_facet.get_value('11').missing, 0)
+            self.assertEqual(category_facet.get_value('11').instance.id, 11)
+            self.assertEqual(category_facet.get_value('11').instance.name, '11 11')
+            self.assertEqual(category_facet.get_value('21').count, 13)
+            self.assertEqual(category_facet.get_value('21').missing, 5)
+            self.assertAlmostEqual(category_facet.get_value('21').min, 99.)
+            self.assertAlmostEqual(category_facet.get_value('21').max, 5358.)
+            self.assertAlmostEqual(category_facet.get_value('21').sum, 27998.20001220703)
+            self.assertAlmostEqual(category_facet.get_value('21').sum_of_squares, 84656302.06075683)
+            self.assertAlmostEqual(category_facet.get_value('21').mean, 2153.707693246695)
+            self.assertAlmostEqual(category_facet.get_value('21').stddev, 1424.674328206475)
+            self.assertEqual(category_facet.get_value('21').instance.id, 21)
+            self.assertEqual(category_facet.get_value('21').instance.name, '21 21')
+            self.assertEqual(category_facet.get_value('66').count, 0)
+            self.assertEqual(category_facet.get_value('66').missing, 1)
+            self.assertEqual(category_facet.get_value('66').min, float('Inf'))
+            self.assertEqual(category_facet.get_value('66').max, float('-Inf'))
+            self.assertAlmostEqual(category_facet.get_value('66').sum, 0.)
+            self.assertAlmostEqual(category_facet.get_value('66').sum_of_squares, 0.)
+            self.assertEqual(str(category_facet.get_value('66').mean), 'nan')
+            self.assertAlmostEqual(category_facet.get_value('66').stddev, 0.)
+            self.assertEqual(category_facet.get_value('66').instance.id, 66)
+            self.assertEqual(category_facet.get_value('66').instance.name, '66 66')
+
+        # empty stats
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 0,
+    "start": 0,
+    "docs": []
+  },
+  "stats": {
+    "stats_fields": {
+      "price": null
+    }
+  }
+}'''
+
+            q = s.search().stats('price')
+
+            raw_query = str(q)
+
+            self.assertIn('stats=true', raw_query)
+            self.assertIn('stats.field=price', raw_query)
+
+            r = q.results
+            s = r.get_stats_field('price')
+            self.assertEqual(s.count, None)
+            self.assertEqual(s.missing, None)
+            self.assertAlmostEqual(s.min, None)
+            self.assertAlmostEqual(s.max, None)
+            self.assertAlmostEqual(s.sum, None)
+            self.assertAlmostEqual(s.sum_of_squares, None)
+            self.assertAlmostEqual(s.mean, None)
+            self.assertAlmostEqual(s.stddev, None)
+
+            
 if __name__ == '__main__':
     from unittest import main
     main()

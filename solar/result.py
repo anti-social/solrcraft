@@ -1,4 +1,3 @@
-from .stats import Stats
 
 class SolrResults(object):
     def __init__(self, query, hits, db_query=None, db_query_filters=[]):
@@ -57,9 +56,8 @@ class SolrResults(object):
                 self.docs.append(doc)
                 self._all_docs.append(doc)
 
-    def add_stats_fields(self, stats_fields):
-        if stats_fields:
-            self.stats_fields = [Stats(field, st) for field, st in stats_fields.items()]
+    def add_stats(self, stats_fields):
+        self.stats_fields = stats_fields
 
     def get_stats_field(self, field):
         for st in self.stats_fields:

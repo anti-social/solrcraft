@@ -9,6 +9,7 @@ from pysolr import SolrError
 
 from .result import SolrResults, Document
 from .facets import FacetField, FacetQuery, FacetValue
+from .stats import Stats
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
 
@@ -42,6 +43,7 @@ class SolrQuery(object):
         self._facet_queries = []
         self._facet_dates = []
         self._facet_ranges = []
+        self._stats_fields = []
         self._params = {}
 
         self._db_query = None
@@ -156,6 +158,9 @@ class SolrQuery(object):
         for facet_query in self._facet_queries:
             params = merge_params(params, facet_query.get_params())
 
+        for stats in self._stats_fields:
+            params = merge_params(params, stats.get_params())
+
     def _make_q(self):
         return make_q(self._q, self._q_local_params, *self._q_args, **self._q_kwargs)
 
@@ -175,7 +180,8 @@ class SolrQuery(object):
         results.add_facets(self._facet_fields, self._facet_queries,
                            self._facet_dates, self._facet_ranges)
 
-        results.add_stats_fields(raw_results.stats.get('stats_fields'))
+        self._process_stats(raw_results.stats)
+        results.add_stats(self._stats_fields)
             
         return results
 
@@ -187,6 +193,11 @@ class SolrQuery(object):
         # facet queries
         for facet_query in self._facet_queries:
             facet_query.process_data(facets['facet_queries'])
+
+    def _process_stats(self, stats):
+        raw_stats_fields = stats.get('stats_fields', {})
+        for stat_field in self._stats_fields:
+            stat_field.process_data(raw_stats_fields)
             
     def _clone(self, cls=None):
         cls = cls or self.__class__
@@ -195,6 +206,7 @@ class SolrQuery(object):
         clone._fq = deepcopy(self._fq)
         clone._facet_fields = deepcopy(self._facet_fields)
         clone._facet_queries = deepcopy(self._facet_queries)
+        clone._stats_fields = deepcopy(self._stats_fields)
         clone._params = deepcopy(self._params)
         clone._db_query = self._db_query
         clone._db_query_filters = copy(self._db_query_filters)
@@ -346,10 +358,11 @@ class SolrQuery(object):
             clone._params['group.%s' % k] = v
         return clone
 
-    def stats(self, field):
+    def stats(self, field, facet_fields=None):
         clone = self._clone()
+        clone._stats_fields.append(
+            Stats(field, facet_fields=facet_fields))
         clone._params['stats'] = True
-        clone._params['stats.field'] = field
         return clone
 
     def get(self, *args, **kwargs):
