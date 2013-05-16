@@ -56,7 +56,7 @@ class Stats(StatsMixin):
     def process_data(self, raw_stats_fields):
         raw_stats = raw_stats_fields.get(self.field) or {}
         for facet in self.facets:
-            facet.process_data(raw_stats['facets'])
+            facet.process_data(raw_stats.get('facets', {}))
         self._process_data(raw_stats)
 
     def get_facet(self, facet_field):
@@ -72,7 +72,7 @@ class StatsFacet(object):
         self.values = []
 
     def process_data(self, raw_data):
-        for value, raw_fv_data in raw_data[self.field].items():
+        for value, raw_fv_data in raw_data.get(self.field, {}).items():
             fv = StatsFacetValue(value, facet=self)
             fv._process_data(raw_fv_data)
             self.values.append(fv)
