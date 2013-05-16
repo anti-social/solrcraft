@@ -808,6 +808,7 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(s.stddev, 1484.7818530839374)
 
             visible_facet = s.get_facet('visible')
+            self.assertEqual(len(visible_facet.values), 1)
             self.assertEqual(visible_facet.get_value('true').count, 14)
             self.assertEqual(visible_facet.get_value('true').missing, 5)
             self.assertAlmostEqual(visible_facet.get_value('true').min, 1.)
@@ -815,6 +816,7 @@ class QueryTest(TestCase):
             self.assertEqual(visible_facet.get_value('true').instance, None)
 
             category_facet = s.get_facet('category')
+            self.assertEqual(len(category_facet.values), 3)
             self.assertEqual(category_facet.get_value('11').count, 1)
             self.assertEqual(category_facet.get_value('11').missing, 0)
             self.assertEqual(category_facet.get_value('11').instance.id, 11)
@@ -875,6 +877,56 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(s.mean, None)
             self.assertAlmostEqual(s.stddev, None)
             
+        # empty stats facet
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 0,
+    "start": 0,
+    "docs": []
+  },
+  "stats": {
+    "stats_fields": {
+      "price": {
+        "min": 1,
+        "max": 5358,
+        "count": 14,
+        "missing": 5,
+        "sum": 27999.20001220703,
+        "sumOfSquares": 84656303.06075683,
+        "mean": 1999.942858014788,
+        "stddev": 1484.7818530839374,
+        "facets": {}
+      }
+    }
+  }
+}'''
+
+            q = s.search().stats('price', facet_fields=['model'])
+
+            raw_query = str(q)
+
+            self.assertIn('stats=true', raw_query)
+            self.assertIn('stats.field=price', raw_query)
+            self.assertIn('f.price.stats.facet=model', raw_query)
+
+            r = q.results
+            s = r.get_stats_field('price')
+
+            self.assertEqual(s.count, 14)
+            self.assertEqual(s.missing, 5)
+            self.assertAlmostEqual(s.min, 1.)
+            self.assertAlmostEqual(s.max, 5358.)
+            self.assertAlmostEqual(s.sum, 27999.20001220703)
+            self.assertAlmostEqual(s.sum_of_squares, 84656303.06075683)
+            self.assertAlmostEqual(s.mean, 1999.942858014788)
+            self.assertAlmostEqual(s.stddev, 1484.7818530839374)
+
+            model_facet = s.get_facet('model')
+            self.assertEqual(len(model_facet.values), 0)
+
     def test_results_exc(self):
         s = SolrSearcher('http://example.com:8180/solr')
         q = s.search().stats('price')
