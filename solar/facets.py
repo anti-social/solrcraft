@@ -133,7 +133,7 @@ class FacetPivot(object):
     
     def process_data(self, results):
         self.values = []
-        raw_pivot = results.raw_results.facets['facet_pivot'][self.key]
+        raw_pivot = results.raw_results.facets.get('facet_pivot', {}).get(self.key, {})
         self.process_pivot(raw_pivot, self)
 
     def process_pivot(self, raw_pivot, root_pivot):

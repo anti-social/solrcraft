@@ -2,29 +2,35 @@ from __future__ import unicode_literals
 
 from copy import deepcopy
 
-from .util import X, LocalParams, make_fq
+from .util import X, LocalParams, make_fq, process_value
 
+
+DEFAULT_OP_SEP = '__'
+DEFAULT_VAL_SEP = ':'
 
 def between_op(f, v):
-    v1, v2 = v.split(':')
-    return X(**{'%s__between' % f: (v1, v2)})
+    v1, v2 = v.split(DEFAULT_VAL_SEP)
+    return X(**{'{}__between'.format(f): (v1, v2)})
+
 
 def isnull_op(f, v):
     if v == '1':
-        return X({'%s__isnull' % f: True})
+        return X({'{}__isnull'.format(f): True})
     elif v == '0':
-        return X({'%s__isnull' % f: False})
+        return X({'{}__isnull'.format(f): False})
     return
 
+
 OPERATORS = {
-    'exact': lambda f, v: X(**{'%s__exact' % f: v}),
-    'gte': lambda f, v: X(**{'%s__gte' % f: v}),
-    'gt': lambda f, v: X(**{'%s__gt' % f: v}),
-    'lte': lambda f, v: X(**{'%s__lte' % f: v}),
-    'lt': lambda f, v: X(**{'%s__lt' % f: v}),
+    'exact': lambda f, v: X(**{'{}__exact'.format(f): v}),
+    'gte': lambda f, v: X(**{'{}__gte'.format(f): v}),
+    'gt': lambda f, v: X(**{'{}__gt'.format(f): v}),
+    'lte': lambda f, v: X(**{'{}__lte'.format(f): v}),
+    'lt': lambda f, v: X(**{'{}__lt'.format(f): v}),
     'between': between_op,
     'isnull': isnull_op,
     }
+
 
 class QueryFilter(object):
     def __init__(self, *filters):
@@ -66,10 +72,10 @@ class QueryFilter(object):
         return query
 
     def add_filter(self, filter):
-        if not isinstance(filter, Filter):
+        if not isinstance(filter, BaseFilter):
             filter = Filter(filter)
-        if filter.name in self.filter_names:
-            return
+        # if filter.name in self.filter_names:
+        #     return
         self.filters.append(filter)
         self.filter_names.append(filter.name)
 
@@ -85,42 +91,35 @@ class QueryFilter(object):
         self.results = results
         for f in self.filters:
             f.process_results(self.results, self.params)
-            
-            # for fq, local_params in results.query._fq:
-            #     if local_params.get('tag') == f.name:
-            #         print fq
 
-            # for facet in results.facet_queries:
-            #     if facet.local_params.get('ex') == f.name:
-            #         print facet
 
 class BaseFilter(object):
 
     def __init__(self, name, coerce=None):
         self.name = name
-        self.coerce = coerce
+        self.coerce = coerce or (lambda v: v)
 
     def _filter_and_split_params(self, params):
         """Returns [(operator1, value1), (operator2, value2)]"""
         items = []
         for p, v in sorted(params.items(), key=lambda i: i[0]):
-            ops = p.split('__')
+            ops = p.split(DEFAULT_OP_SEP)
             name = ops[0]
             if len(ops) == 1:
                 op = 'exact'
             else:
-                op = '__'.join(ops[1:])
+                op = DEFAULT_OP_SEP.join(ops[1:])
             if name == self.name:
                 for w in v:
-                    if self.coerce:
-                        try:
-                            w = self.coerce(w)
-                        except ValueError:
-                            continue
+                    try:
+                        w = self.coerce(w)
+                    except ValueError:
+                        continue
                     yield op, w
 
     def process_results(self, results, params):
         raise NotImplementedError()
+
 
 class Filter(BaseFilter):
     fq_connector = X.OR
@@ -168,14 +167,8 @@ class Filter(BaseFilter):
     def process_results(self, results, params):
         pass
 
-class FacetFilterValue(object):
-    def __init__(self, filter_name, facet_value, selected, title=None, **kwargs):
-        self.filter_name = filter_name
-        self.facet_value = facet_value
-        self.selected = selected
-        self._title = title
-        self.opts = kwargs
 
+class FacetFilterValueMixin(object):
     def __unicode__(self):
         return unicode(self.title)
 
@@ -192,6 +185,10 @@ class FacetFilterValue(object):
         return self.facet_value.value
 
     @property
+    def param_value(self):
+        return process_value(self.value, safe=True)
+
+    @property
     def count(self):
         return self.facet_value.count
     
@@ -199,13 +196,23 @@ class FacetFilterValue(object):
     def instance(self):
         return self.facet_value.instance
 
+    
+class FacetFilterValue(FacetFilterValueMixin):
+    def __init__(self, filter_name, facet_value, selected, title=None, **kwargs):
+        self.filter_name = filter_name
+        self.facet_value = facet_value
+        self.selected = selected
+        self._title = title
+        self.opts = kwargs
+
+
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
     
-    def __init__(self, name, field=None, filter_value_cls=None,
+    def __init__(self, name, field=None, filter_value_cls=None, coerce=None,
                  _local_params=None, _instance_mapper=None,
                  select_multiple=True, **kwargs):
-        super(FacetFilter, self).__init__(name, field,
+        super(FacetFilter, self).__init__(name, field, coerce=coerce,
                                           select_multiple=select_multiple)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(_local_params)
@@ -235,8 +242,8 @@ class FacetFilter(Filter):
     def apply(self, query, params):
         query = super(FacetFilter, self).apply(query, params)
         local_params = LocalParams(self.local_params)
-        local_params['ex'] = self.name
         local_params['key'] = self.name
+        local_params['ex'] = self.name
         query = query.facet_field(
             self.field, _local_params=local_params,
             _instance_mapper=self.instance_mapper, **self.kwargs)
@@ -254,6 +261,109 @@ class FacetFilter(Filter):
                     self.add_value(self.filter_value_cls(self.name, fv, selected))
                 break
 
+
+class FacetPivotFilterValueMixin(object):
+    @property
+    def all_values(self):
+        return self.pivot.all_values
+
+    @property
+    def selected_values(self):
+        return self.pivot.selected_values
+
+    @property
+    def values(self):
+        return self.pivot.values
+
+
+class FacetPivotFilterValue(FacetFilterValueMixin, FacetPivotFilterValueMixin):
+    def __init__(self, filter_name, facet_values, selected, title=None,
+                 **kwargs):
+        self.filter_name = filter_name
+        self.facet_values = facet_values
+        self.facet_value = facet_values[-1]
+        self.selected = selected
+        self._title = title
+        self.opts = kwargs
+        self.pivot = None
+
+    @property
+    def param_value(self):
+        return DEFAULT_VAL_SEP.join(process_value(fv.value, safe=True) for fv in self.facet_values)
+    
+
+class FacetPivotFilter(FacetFilter):
+    filter_value_cls = FacetPivotFilterValue
+
+    def __init__(self, name, field=None, filter_value_cls=None,
+                 coerce=None, _pivot_filter=None, **kwargs):
+        super(FacetPivotFilter, self).__init__(
+            name, field=field, filter_value_cls=filter_value_cls,
+            coerce=coerce, **kwargs)
+        self._pivot_filter = _pivot_filter
+
+    def bind(self, pivot_filter):
+        return FacetPivotFilter(
+            self.name, field=self.field, filter_value_cls=self.filter_value_cls,
+            coerce=self.coerce, _pivot_filter=pivot_filter, **self.kwargs)
+        
+    def process_facet(self, facet, pivot_filters, selected_values, facet_values):
+        cur_selected_values = set(self.coerce(v[0]) for v in selected_values)
+
+        for fv in facet.values:
+            selected = fv.value in cur_selected_values
+            filter_value = self.filter_value_cls(
+                self._pivot_filter.name, facet_values + [fv], selected)
+            self.add_value(filter_value)
+            if fv.pivot:
+                pivot_filter = pivot_filters[0].bind(self._pivot_filter)
+                pivot_filter.process_facet(
+                    fv.pivot,
+                    pivot_filters[1:],
+                    [v[1:] for v in selected_values if len(v) > 1 and fv.value == v[0]],
+                    facet_values + [fv])
+                filter_value.pivot = pivot_filter
+                
+
+class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
+    def __init__(self, name, *pivots, **kwargs):
+        import string
+        super(PivotFilter, self).__init__(name)
+        self._pivots = pivots
+        self._pivot_fields = [p.field for p in pivots]
+        self._instance_mappers = [p._instance_mapper for p in pivots]
+        self._pivot_params = [p.kwargs for p in pivots]
+        self.local_params = LocalParams(kwargs.pop('_local_params', None))
+        self.pivot = self._pivots[0].bind(self)
+
+    def apply(self, query, params):
+        local_params = LocalParams(self.local_params)
+        local_params['key'] = self.name
+        local_params['ex'] = self.name
+        query = query.facet_pivot(
+            *zip(self._pivot_fields, self._instance_mappers, self._pivot_params),
+            _local_params=local_params)
+        fqs = []
+        for op, values_str in self._filter_and_split_params(params):
+            op_func = OPERATORS.get(op)
+            if op_func:
+                x = X()
+                for field, v in zip(self._pivot_fields, values_str.split(DEFAULT_VAL_SEP)):
+                    x = x & op_func(field, v)
+                fqs.append(x)
+        local_params = LocalParams()
+        local_params['tag'] = self.name
+        return query.filter(X(*fqs, _op='OR'), _local_params=local_params)
+
+    def process_results(self, results, params):
+        selected_values = [v.split(DEFAULT_VAL_SEP) for v in params.get(self.name, [])]
+        self.pivot.process_facet(
+            results.get_facet_pivot(self.name),
+            self._pivots[1:],
+            selected_values,
+            [])
+
+                
 class FacetQueryFilterValue(object):
     def __init__(self, name, fq, _local_params=None, title=None, **kwargs):
         self.filter_name = None
@@ -270,11 +380,12 @@ class FacetQueryFilterValue(object):
                     
     @property
     def _key(self):
-        return '%s__%s' % (self.filter_name, self.value)
+        return '{}__{}'.format(self.filter_name, self.value)
 
     @property
     def count(self):
         return self.facet_query.count
+
 
 class FacetQueryFilter(Filter):
     def __init__(self, name, *args, **kwargs):
@@ -328,6 +439,7 @@ class FacetQueryFilter(Filter):
                         was_selected = True
         if not was_selected and self.default:
             self.get_value(self.default).selected = True
+
 
 class RangeFilter(Filter):
     fq_connector = X.AND
@@ -404,6 +516,7 @@ class OrderingValue(object):
     def apply(self, query, params):
         return query.order_by(*self.fields)
         
+
 class OrderingFilter(BaseFilter):
     def __init__(self, name, *args, **kwargs):
         self.name = name
