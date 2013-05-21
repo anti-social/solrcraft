@@ -208,6 +208,11 @@ def process_value(v, safe=False):
         return force_unicode(v)
     return safe_solr_input(v)
 
+def maybe_wrap_parentheses(v):
+    if not re.match(r'".*"', v, re.DOTALL) and re.search(r'\s', v):
+        return '(%s)' % v
+    return v
+
 def process_field(field, op, value):
     if op == 'exact':
         return '%s:"%s"' % (field, process_value(value))
@@ -238,10 +243,10 @@ def process_field(field, op, value):
         else:
             return '%s:[* TO *]' % field
     elif op == 'startswith':
-        return '%s:%s*' % (field, process_value(value))
+        return '%s:%s' % (field, maybe_wrap_parentheses('%s*' % process_value(value)))
     elif value is None:
         return 'NOT %s:[* TO *]' % field
-    return '%s:%s' % (field, process_value(value))
+    return '%s:%s' % (field, maybe_wrap_parentheses(process_value(value)))
 
 def fq_from_tuple(x):
     field, op = split_param(x[0])
