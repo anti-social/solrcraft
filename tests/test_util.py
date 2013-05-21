@@ -44,8 +44,12 @@ class UtilTest(TestCase):
                          u"status:0 AND (company_status:0 OR company_status:6)")
         self.assertEqual(make_fq(X(status=0) | X(company_status=0)),
                          u"(status:0 OR company_status:0)")
-        self.assertEqual(make_fq(X(manufacturer__exact='Chuck Norris')),
-                         u'manufacturer:"Chuck Norris"')
+        self.assertEqual(make_fq(X(name='Chuck Norris')),
+                         u"name:(Chuck Norris)")
+        self.assertEqual(make_fq(X(name__exact='Chuck Norris')),
+                         u'name:"Chuck Norris"')
+        self.assertEqual(make_fq(X(name__startswith='Chuck Nor')),
+                         u'name:(Chuck Nor*)')
         self.assertEqual(make_fq(X(with_photo=True)),
                          u"with_photo:true")
         self.assertEqual(make_fq(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
@@ -70,6 +74,8 @@ class UtilTest(TestCase):
                          u'status:"0"')
         self.assertEqual(make_fq(X(LocalParams('dismax', qf='name', v=X(u'nokia lumia')))),
                          u"{!dismax qf=name v='nokia lumia'}")
+        self.assertEqual(make_fq(X(_query_=LocalParams('dismax', qf='name', v=X('nokia lumia')))),
+                         u"_query_:\"{!dismax qf=name v='nokia lumia'}\"")
 
     def test_local_params(self):
         self.assertEqual(str(LocalParams({'cache': False})),
