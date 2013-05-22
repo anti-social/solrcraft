@@ -3,10 +3,6 @@ from __future__ import unicode_literals
 from datetime import datetime
 from unittest import TestCase
 from collections import namedtuple
-try:
-    from urllib import quote_plus
-except ImportError:
-    from urllib.parse import quote_plus
 
 from mock import patch
 
@@ -28,7 +24,7 @@ def as_bool(v):
 Obj = namedtuple('Obj', ['id', 'name'])
 
 def _obj_mapper(ids):
-    return dict((id, Obj(id, '{} {}'.format(id, id))) for id in ids)
+    return dict((id, Obj(id, '{0} {0}'.format(id))) for id in ids)
 
 
 class CategoryFilterValue(FacetFilterValue):
@@ -140,12 +136,13 @@ class QueryTest(TestCase):
             raw_query = str(q)
 
             self.assertIn('facet=true', raw_query)
-            self.assertIn('facet.pivot=%s' % quote_plus('{!key=manu ex=manu}manufacturer,model,discount'), raw_query)
+            self.assertIn('facet.pivot={!key=manu ex=manu}manufacturer,model,discount', raw_query)
             self.assertIn('f.manufacturer.facet.mincount=1', raw_query)
             self.assertIn('f.model.facet.limit=5', raw_query)
-            self.assertIn('fq=%s' % quote_plus('{!tag=manu}((manufacturer:"samsung" AND model:"note") '
-                                               'OR (manufacturer:"nokia" AND model:"n900" AND discount:"false") '
-                                               'OR (manufacturer:"nothing" AND model:""))'), raw_query)
+            self.assertIn('fq={!tag=manu}((manufacturer:"samsung" AND model:"note") '
+                          'OR (manufacturer:"nokia" AND model:"n900" AND discount:"false") '
+                          'OR (manufacturer:"nothing" AND model:""))',
+                          raw_query)
 
             qf.process_results(q.results)
 
@@ -273,24 +270,22 @@ class QueryTest(TestCase):
 
             q = qf.apply(q, params)
             raw_query = str(q)
-            # from urllib.parse import unquote
-            # print(unquote(raw_query))
 
             self.assertIn('facet=true', raw_query)
-            self.assertIn('facet.field=%s' % quote_plus('{!cache=false key=cat ex=cat}category'), raw_query)
-            self.assertIn('facet.query=%s' % quote_plus('{!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]'), raw_query)
-            self.assertIn('facet.query=%s' % quote_plus('{!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]'), raw_query)
-            self.assertIn('facet.query=%s' % quote_plus('{!geofilt d=5 key=dist__d5 ex=dist}'), raw_query)
-            self.assertIn('facet.query=%s' % quote_plus('{!geofilt d=10 key=dist__d10 ex=dist}'), raw_query)
-            self.assertIn('facet.query=%s' % quote_plus('{!geofilt d=20 key=dist__d20 ex=dist}'), raw_query)
+            self.assertIn('facet.field={!cache=false key=cat ex=cat}category', raw_query)
+            self.assertIn('facet.query={!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
+            self.assertIn('facet.query={!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]', raw_query)
+            self.assertIn('facet.query={!geofilt d=5 key=dist__d5 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=10 key=dist__d10 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=20 key=dist__d20 ex=dist}', raw_query)
             # self.assertIn('stats=true', raw_query)
             # self.assertIn('stats.field=price_unit', raw_query)
-            self.assertIn('fq=%s' % quote_plus('{!cache=false tag=cat}(category:"5" OR category:"13")'), raw_query)
-            self.assertIn('fq=%s' % quote_plus('{!tag=country}country:"ru"'), raw_query)
-            self.assertIn('fq=%s' % quote_plus('{!tag=date_created}date_created:[NOW/DAY-1DAY TO *]'), raw_query)
-            self.assertIn('fq=%s' % quote_plus('{!cache=false tag=price}price_unit:[100 TO *] AND price_unit:[* TO 200]'), raw_query)
-            self.assertIn('fq=%s' % quote_plus('{!geofilt d=10 tag=dist}'), raw_query)
-            self.assertIn('sort=%s' % quote_plus('price desc'), raw_query)
+            self.assertIn('fq={!cache=false tag=cat}(category:"5" OR category:"13")', raw_query)
+            self.assertIn('fq={!tag=country}country:"ru"', raw_query)
+            self.assertIn('fq={!tag=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
+            self.assertIn('fq={!cache=false tag=price}price_unit:[100 TO *] AND price_unit:[* TO 200]', raw_query)
+            self.assertIn('fq={!geofilt d=10 tag=dist}', raw_query)
+            self.assertIn('sort=price desc', raw_query)
 
             results = q.results
             with patch.object(s.solrs_read[0], '_send_request'):

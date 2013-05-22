@@ -8,6 +8,15 @@ from solar.searcher import SolrSearcher
 
 
 class SearcherTestCase(TestCase):
+    def test_attached_searcher(self):
+        class Model:
+            pass
+
+        class ModelSearcher(SolrSearcher):
+            model = Model
+
+        self.assertEqual(Model.searcher.__class__, ModelSearcher)
+
     def test_get(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_write[0], '_send_request'):

@@ -2,6 +2,7 @@ from __future__ import unicode_literals
 
 import random
 
+from .compat import with_metaclass
 from .pysolr import Solr
 from .query import SolrQuery
 from .util import SafeUnicode, X, make_q
@@ -19,9 +20,7 @@ class SolrSearcherMeta(type):
 
         return cls
 
-class SolrSearcher(object):
-    __metaclass__ = SolrSearcherMeta
-
+class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     solr_url = None
     solr_read_urls = None
     solr_write_urls = None

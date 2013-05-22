@@ -4,15 +4,16 @@ import re
 import sys
 from copy import copy, deepcopy
 try:
-    from urllib import urlencode, quote_plus
+    from urllib import urlencode, unquote_plus
 except ImportError:
-    from urllib.parse import urlencode, quote_plus
+    from urllib.parse import urlencode, unquote_plus
 import logging
 import warnings
 from itertools import chain
 
-from .pysolr import SolrError, force_unicode
+from .pysolr import SolrError
 
+from .compat import PY2, force_unicode, implements_to_string, reraise
 from .result import SolrResults
 from .stats import Stats
 from .facets import FacetField, FacetQuery, FacetPivot
@@ -23,6 +24,7 @@ from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 log = logging.getLogger(__name__)
 
 DEFAULT_ROWS = 10
+
 
 class SolrParameterSetter(object):
     def __init__(self, solr_query, param_name):
@@ -37,6 +39,8 @@ class SolrParameterSetter(object):
             solr_query._params[self.param_name] = list(args)
         return solr_query
 
+
+@implements_to_string
 class SolrQuery(object):
     def __init__(self, searcher, q, *args, **kwargs):
         self.searcher = searcher
@@ -60,20 +64,20 @@ class SolrQuery(object):
 
         self._result_cache = None
 
-    def __unicode__(self):
-        return unquote_plus(str(self)).decode('utf-8')
-
     def __str__(self):
-        params = self._prepare_params()
-        p = []
-        p.append(('q', self._make_q().encode('utf-8')))
-        for k, v in params.items():
-            if isinstance(v, (list, tuple)):
-                for w in v:
-                    p.append((k, w))
-            else:
-                p.append((k, v))
-        return urlencode(p, True)
+        def simple_quote(s):
+            return force_unicode(s).replace('%', '%25').replace('&', '%26')
+        
+        params = []
+        params.append(('q', self._make_q()))
+        params.extend(self._prepare_params().items())
+        parts = []
+        for p, v in params:
+            if not isinstance(v, (list, tuple)):
+                v = [v]
+            for w in v:
+                parts.append('{}={}'.format(simple_quote(p), simple_quote(w)))
+        return '&'.join(parts)
 
     def __len__(self):
         results = self._fetch_results()
@@ -206,11 +210,7 @@ class SolrQuery(object):
             return self._fetch_results()
         except AttributeError as e:
             # catch AttributeError cause else __getattr__ will be called
-            tb = sys.exc_info()[2]
-            try:
-                raise RuntimeError(e.__class__.__name__, *e.args).with_traceback(tb)
-            except AttributeError:
-                exec('raise RuntimeError(e.__class__.__name__, *e.args), None, tb')
+            reraise(RuntimeError, RuntimeError(e.__class__.__name__, *e.args), sys.exc_info()[2])
 
     def search(self, q):
         clone = self._clone()
@@ -362,6 +362,7 @@ class SolrQuery(object):
         if len(clone):
             return clone[0]
 
+
 class InstancesSolrQuery(SolrQuery):
     def __iter__(self):
         results = self._fetch_results()
@@ -374,4 +375,3 @@ class InstancesSolrQuery(SolrQuery):
         elif isinstance(res, list):
             return [doc.instance for doc in res if doc.instance]
         return res.instance
-

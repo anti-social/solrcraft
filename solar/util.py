@@ -11,8 +11,8 @@ try:
 except ImportError:
     from ordereddict import OrderedDict
 
+from .compat import PY2, text_type, string_types, binary_type, force_unicode
 from .tree import Node
-from .pysolr import IS_PY3, force_unicode
 
 
 CALENDAR_UNITS = ['MILLI', 'MILLISECOND', 'SECOND', 'MINUTE',
@@ -26,14 +26,6 @@ SPECIAL_WORDS = ['AND', 'OR', 'NOT', 'TO']
 # See: http://lucene.apache.org/core/3_6_0/queryparsersyntax.html#Escaping%20Special%20Characters
 SPECIAL_CHARACTERS =  r'\+-&|!(){}[]^"~*?:'
 
-if IS_PY3:
-    string_types = str,
-    text_type = str
-    binary_type = bytes
-else:
-    string_types = basestring,
-    text_type = unicode
-    binary_type = str
 
 class SafeString(binary_type):
     pass
@@ -42,6 +34,7 @@ class SafeUnicode(text_type):
     pass
 
 ALL = SafeUnicode('*:*')
+
 
 def process_special_words(value, words=None):
     words = words or SPECIAL_WORDS
@@ -281,7 +274,7 @@ def make_fq(x, local_params=None):
         return []
 
     local_params = local_params or LocalParams()
-    return '%s%s' % (str(local_params),
+    return '%s%s' % (force_unicode(local_params),
                      (' %s ' % x.connector).join(_make_fq(x, 0)))
 
 def make_q(q=None, local_params=None, *args, **kwargs):
