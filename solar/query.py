@@ -2,14 +2,10 @@ from __future__ import unicode_literals
 
 import re
 import sys
-from copy import copy, deepcopy
-try:
-    from urllib import urlencode, unquote_plus
-except ImportError:
-    from urllib.parse import urlencode, unquote_plus
 import logging
 import warnings
-from itertools import chain
+from copy import copy, deepcopy
+from itertools import chain, starmap
 
 from .pysolr import SolrError
 
@@ -22,8 +18,6 @@ from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
 
 log = logging.getLogger(__name__)
-
-DEFAULT_ROWS = 10
 
 
 class SolrParameterSetter(object):
@@ -96,15 +90,11 @@ class SolrQuery(object):
         else:
             if isinstance(k, slice):
                 start, stop = k.start, k.stop
-                if start is None:
-                    start = 0
-                if stop is None:
-                    rows = DEFAULT_ROWS
-                else:
-                    rows = stop - start
                 clone = self._clone()
-                clone._params['start'] = start
-                clone._params['rows'] = rows
+                if start is not None:
+                    clone._params['start'] = start
+                if stop is not None:
+                    clone._params['rows'] = stop - start
                 return clone
             else:
                 return self._fetch_results().docs[k]
@@ -148,13 +138,13 @@ class SolrQuery(object):
         
         if only_count:
             params['rows'] = 0
-        elif 'rows' not in params:
-            params['rows'] = DEFAULT_ROWS
         if self._fq:
             params['fq'] = [make_fq(x, local_params)
                             for x, local_params in self._fq]
         if 'qf' in params:
-            params['qf'] = ' '.join('%s^%s' % (f, w) for f, w in params['qf'] if w)
+            params['qf'] = ' '.join(
+                starmap('{}^{}'.format,
+                        filter(lambda fw: fw[1], params['qf'])))
         if 'fl' not in params:
             params['fl'] = ('*', 'score')
 
@@ -278,17 +268,22 @@ class SolrQuery(object):
         return clone
 
     def order_by(self, *args):
+        clone = self._clone()
         if not args:
-            return self.sort(None)
-        fields = []
+            return clone
+        if len(args) == 1 and args[0] is None:
+            clone._params['sort'] = None
+            return clone
+        fields = list(clone._params.get('sort', []))
         for field in args:
             if field is None:
                 continue
             if field.startswith('-'):
-                fields.append('%s desc' % field[1:])
+                fields.append('{} desc'.format(field[1:]))
             else:
-                fields.append('%s asc' % field)
-        return self.sort(tuple(fields))
+                fields.append('{} asc'.format(field))
+        clone._params['sort'] = tuple(fields)
+        return clone
 
     def limit(self, n):
         return self.rows(n)
@@ -313,7 +308,7 @@ class SolrQuery(object):
         clone._params['facet.missing'] = missing
         clone._params['facet.method'] = method
         for p, v in kwargs.items():
-            clone._params['facet.%s' % p] = v
+            clone._params['facet.{}'.format(p)] = v
         return clone
 
     def facet_field(self, field, _local_params=None, _instance_mapper=None, **kwargs):

@@ -43,6 +43,15 @@ class QueryTest(TestCase):
         self.assertIn('q=name:test', raw_query)
         self.assertIn('defType=edismax', raw_query)
 
+        q = SolrSearcher().search().order_by('-score')
+        self.assertIn('sort=score desc', str(q))
+        q = q.order_by('popularity')
+        self.assertIn('sort=score desc,popularity asc', str(q))
+        q = q.order_by()
+        self.assertIn('sort=score desc,popularity asc', str(q))
+        q = q.order_by(None)
+        self.assertNotIn('sort', str(q))
+
         q = (
             SolrSearcher().search(X(name='test') | X(name__startswith='test'))
             .dismax()
