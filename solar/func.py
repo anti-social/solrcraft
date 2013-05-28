@@ -43,10 +43,10 @@ class Function(object):
         return obj
     
     def __str__(self):
-        weight = '^%s' % self.weight if self.weight else ''
+        weight = '^{}'.format(self.weight) if self.weight else ''
         parts = []
         parts.append(
-            '%s(%s)%s' % (
+            '{}({}){}'.format(
                 self.name,
                 ','.join(force_unicode(a) for a in self.args),
                 weight

@@ -35,7 +35,7 @@ class Grouped(object):
         params['group'] = True
         params['group.field'] = [make_fq(X(self.field))]
         for p, v in self.grouped_params.items():
-            params['group.%s' % p] = v
+            params['group.{}'.format(p)] = v
         return params
 
     def process_data(self, results):

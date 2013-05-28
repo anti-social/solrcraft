@@ -142,7 +142,7 @@ class CommonSearcher(SolrSearcher):
         return self.type_value or self.model.__name__
 
     def get_unique_value(self, id):
-        return '%s%s%s' % (
+        return '{}{}{}'.format(
             self.get_type_value(), self.sep, id,
         )
     

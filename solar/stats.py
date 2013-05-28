@@ -51,7 +51,7 @@ class Stats(StatsMixin):
     def get_params(self):
         params = {}
         params['stats.field'] = [self.field]
-        params['f.%s.stats.facet' % self.field] = [
+        params['f.{}.stats.facet'.format(self.field)] = [
             facet.field for facet in self.facets]
         return params
 

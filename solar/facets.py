@@ -34,7 +34,7 @@ class FacetField(object):
         params['facet'] = True
         params['facet.field'] = [make_fq(X(self.field), self.local_params)]
         for p, v in self.facet_params.items():
-            params['f.%s.facet.%s' % (self.field, p)] = v
+            params['f.{}.facet.{}'.format(self.field, p)] = v
         return params
 
     def process_data(self, results):
@@ -120,10 +120,10 @@ class FacetPivot(object):
         params['facet'] = True
         params['facet.pivot'] = [make_fq(X(self.name), self.local_params)]
         for p, v in self.facet_pivot_params.items():
-            params['facet.pivot.%s' % p] = v
+            params['facet.pivot.{}'.format(p)] = v
         for field, facet_params in self.facet_params.items():
             for p, v in facet_params.items():
-                params['f.%s.facet.%s' % (field, p)] = v
+                params['f.{}.facet.{}'.format(field, p)] = v
         return params
 
     def get_value(self, value):

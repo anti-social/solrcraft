@@ -17,9 +17,9 @@ from .tree import Node
 
 CALENDAR_UNITS = ['MILLI', 'MILLISECOND', 'SECOND', 'MINUTE',
                   'HOUR', 'DAY', 'MONTH', 'YEAR']
-UNIT_GROUPS =  '|'.join('(%sS?)' % unit for unit in CALENDAR_UNITS)
+UNIT_GROUPS =  '|'.join('({}S?)'.format(unit) for unit in CALENDAR_UNITS)
 SOLR_DATETIME_RE = re.compile(
-    r'^NOW(/(%s))?([+-]\d+(%s))*$' % (UNIT_GROUPS, UNIT_GROUPS))
+    r'^NOW(/({}))?([+-]\d+({}))*$'.format(UNIT_GROUPS, UNIT_GROUPS))
 
 SPECIAL_WORDS = ['AND', 'OR', 'NOT', 'TO']
 
@@ -39,13 +39,13 @@ ALL = SafeUnicode('*:*')
 def process_special_words(value, words=None):
     words = words or SPECIAL_WORDS
     for w in words:
-        value = re.sub(r'(\A|\s+)(%s)(\s+|\Z)' % w, lambda m: m.group(0).lower(), value)
+        value = re.sub(r'(\A|\s+)({})(\s+|\Z)'.format(w), lambda m: m.group(0).lower(), value)
     return value
 
 def process_special_characters(value, chars=None):
     chars = chars or SPECIAL_CHARACTERS
     for c in chars:
-        value = value.replace(c, r'\%s' % c)
+        value = value.replace(c, r'\{}'.format(c))
     return value
 
 def contains_special_characters(value, chars=None):
@@ -152,9 +152,9 @@ class LocalParams(OrderedDict):
                 key, value = 'type', key
         
         if contains_special_characters(key, self.SPECIAL_CHARACTERS):
-            raise ValueError("Key '%s' contains special characters" % key)
+            raise ValueError("Key '{}' contains special characters".format(key))
         if key == 'type' and contains_special_characters(value, self.SPECIAL_CHARACTERS):
-            raise ValueError("Type value '%s' contains special characters" % value)
+            raise ValueError("Type value '{}' contains special characters".format(value))
         
         self[key] = value
 
@@ -163,7 +163,7 @@ class LocalParams(OrderedDict):
         if replace_words:
             value = process_special_words(value)
         if contains_special_characters(value, self.SPECIAL_CHARACTERS):
-            return "'%s'" % value.replace("'", "\\\\'").replace('"', '\\"')
+            return "'{}'".format(value.replace("'", "\\\\'").replace('"', '\\"'))
         return value
     
     def __str__(self):
@@ -180,11 +180,11 @@ class LocalParams(OrderedDict):
                     value = make_fq(value)
                     replace_words = False
                 parts.append(
-                    '%s=%s' % (
+                    '{}={}'.format(
                         key,
                         self._quote(process_value(value, safe=True),
                                     replace_words=replace_words)))
-        return '{!%s}' % ' '.join(parts)
+        return '{{!{0}}}'.format(' '.join(parts))
 
 def process_value(v, safe=False):
     if v is True:
@@ -192,7 +192,7 @@ def process_value(v, safe=False):
     if v is False:
         return 'false'
     if isinstance(v, LocalParams):
-        return '"%s"' % force_unicode(v)
+        return '"{}"'.format(force_unicode(v))
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
     if isinstance(v, string_types) and SOLR_DATETIME_RE.match(v):
@@ -203,43 +203,45 @@ def process_value(v, safe=False):
 
 def maybe_wrap_parentheses(v):
     if not re.match(r'".*"', v, re.DOTALL) and re.search(r'\s', v):
-        return '(%s)' % v
+        return '({})'.format(v)
     return v
 
 def process_field(field, op, value):
     if op == 'exact':
-        return '%s:"%s"' % (field, process_value(value))
+        return '{}:"{}"'.format(field, process_value(value))
     elif op == 'gte':
-        return '%s:[%s TO *]' % (field, process_value(value))
+        return '{}:[{} TO *]'.format(field, process_value(value))
     elif op == 'lte':
-        return '%s:[* TO %s]' % (field, process_value(value))
+        return '{}:[* TO {}]'.format(field, process_value(value))
     elif op == 'gt':
-        return '%s:{%s TO *}' % (field, process_value(value))
+        return '{}:{{{} TO *}}'.format(field, process_value(value))
     elif op == 'lt':
-        return '%s:{* TO %s}' % (field, process_value(value))
+        return '{}:{{* TO {}}}'.format(field, process_value(value))
     elif op in ('between', 'range'):
         v0 = '*' if value[0] is None else process_value(value[0])
         v1 = '*' if value[1] is None else process_value(value[1])
         if op == 'between':
-            return '%s:{%s TO %s}' % (field, v0, v1)
+            return '{}:{{{} TO {}}}'.format(field, v0, v1)
         elif op == 'range':
-            return '%s:[%s TO %s]' % (field, v0, v1)
+            return '{}:[{} TO {}]'.format(field, v0, v1)
     elif op == 'in':
         if hasattr(value, '__iter__') and len(value) > 0:
-            return '(%s)' % (' %s ' % X.OR).join(
-                ['%s:%s' % (field, process_value(v)) for v in value])
+            return '({})'.format(
+                ' {} '.format(X.OR).join(
+                    ['{}:{}'.format(field, process_value(v)) for v in value]))
         else:
-            return '(%s:[* TO *] AND NOT %s:[* TO *])' % (field, field)
+            return '({0}:[* TO *] AND NOT {0}:[* TO *])'.format(field)
     elif op == 'isnull':
         if value:
-            return 'NOT %s:[* TO *]' % field
+            return 'NOT {}:[* TO *]'.format(field)
         else:
-            return '%s:[* TO *]' % field
+            return '{}:[* TO *]'.format(field)
     elif op == 'startswith':
-        return '%s:%s' % (field, maybe_wrap_parentheses('%s*' % process_value(value)))
+        return '{}:{}'.format(
+            field, maybe_wrap_parentheses('{}*'.format(process_value(value))))
     elif value is None:
-        return 'NOT %s:[* TO *]' % field
-    return '%s:%s' % (field, maybe_wrap_parentheses(process_value(value)))
+        return 'NOT {}:[* TO *]'.format(field)
+    return '{}:{}'.format(field, maybe_wrap_parentheses(process_value(value)))
 
 def fq_from_tuple(x):
     field, op = split_param(x[0])
@@ -265,17 +267,18 @@ def make_fq(x, local_params=None):
         if level == 0 and x.connector == X.AND:
             return fq
         if fq:
-            fq = (' %s ' % x.connector).join(fq)
+            fq = ' {} '.format(x.connector).join(fq)
             if len(x.children) > 1:
-                fq = '(%s)' % fq
+                fq = '({})'.format(fq)
             if x.negated:
-                return ['NOT (%s)' % fq]
+                return ['NOT ({})'.format(fq)]
             return [fq]
         return []
 
     local_params = local_params or LocalParams()
-    return '%s%s' % (force_unicode(local_params),
-                     (' %s ' % x.connector).join(_make_fq(x, 0)))
+    return '{}{}'.format(
+        force_unicode(local_params),
+        (' {} '.format(x.connector)).join(_make_fq(x, 0)))
 
 def make_q(q=None, local_params=None, *args, **kwargs):
     if q is None and not args and not kwargs:
