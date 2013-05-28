@@ -192,6 +192,11 @@ class SolrQuery(object):
         return clone
     clone = _clone
 
+    def _clean_params(self, name):
+        for key in list(self._params.keys()):
+            if key == name or key.startswith('{}.'.format(name)):
+                del self._params[key]
+
     # Public methods
 
     @property
@@ -296,9 +301,19 @@ class SolrQuery(object):
         clone._params[param_name] = value
         return clone
 
-    def facet(self, limit=None, offset=None, mincount=None, sort=None,
+    def facet(self, *fields, limit=None, offset=None, mincount=None, sort=None,
               prefix=None, missing=None, method=None, **kwargs):
         clone = self._clone()
+        if len(fields) == 1 and fields[0] is None:
+            clone._clean_params('facet')
+            clone._facet_fields = []
+            clone._facet_queries = []
+            clone._facet_dates = []
+            clone._facet_ranges = []
+            clone._facet_pivots = []
+            return clone
+        for field in fields:
+            clone = clone.facet_field(field)
         clone._params['facet'] = True
         clone._params['facet.limit'] = limit
         clone._params['facet.offset'] = offset

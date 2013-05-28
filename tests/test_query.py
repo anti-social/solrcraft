@@ -93,6 +93,30 @@ class QueryTest(TestCase):
             'q=(_query_:"{!dismax bf=\'linear(rank,100,0)\' qf=\'name^10\' v=nokia}" '
             'AND _query_:"{!dismax bf=\'linear(rank,100,0)\' qf=description v=\'nokia lumia and\'}")',
             raw_query)
+
+        q = (
+            SolrSearcher().search()
+            .facet('category', 'model', mincount=5)
+            .facet_field('manufacturer', limit=10)
+            .facet_query(X(is_active=True))
+        )
+        raw_query = str(q)
+        self.assertIn('facet=true', raw_query)
+        self.assertIn('facet.mincount=5', raw_query)
+        self.assertIn('facet.field=category', raw_query)
+        self.assertIn('facet.field=model', raw_query)
+        self.assertIn('facet.field=manufacturer', raw_query)
+        self.assertIn('f.manufacturer.facet.limit=10', raw_query)
+        self.assertIn('facet.query=is_active:true', raw_query)
+        q = q.facet(None)
+        raw_query = str(q)
+        self.assertNotIn('facet=true', raw_query)
+        self.assertNotIn('facet.mincount=5', raw_query)
+        self.assertNotIn('facet.field=category', raw_query)
+        self.assertNotIn('facet.field=model', raw_query)
+        self.assertNotIn('facet.field=manufacturer', raw_query)
+        self.assertNotIn('f.manufacturer.facet.limit=10', raw_query)
+        self.assertNotIn('facet.query=is_active:true', raw_query)
     
     def test_filter(self):
         q = SolrSearcher().search()
