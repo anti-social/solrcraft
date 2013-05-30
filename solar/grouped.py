@@ -23,7 +23,7 @@ class Grouped(object):
     def get_params(self):
         params = {}
         params['group'] = True
-        params['group.{}' % self.param_name] = [self.key]
+        params['group.{}'.format(self.param_name)] = [self.key]
         for p, v in self.grouped_params.items():
             params['group.{}'.format(p)] = v
         return params
