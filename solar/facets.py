@@ -21,7 +21,6 @@ class FacetField(object):
         obj = type(self)(self.field, self.local_params,
                          instance_mapper=self._instance_mapper,
                          **self.facet_params)
-        obj.values = deepcopy(self.values, memodict)
         return obj
 
     def instance_mapper(self, ids):

@@ -18,7 +18,7 @@ def _obj_mapper(ids):
 
 
 class QueryTest(TestCase):
-    def test_query(self):
+    def test_query_params(self):
         q = SolrSearcher().search().dismax()
         raw_query = str(q)
 
@@ -94,6 +94,7 @@ class QueryTest(TestCase):
             'AND _query_:"{!dismax bf=\'linear(rank,100,0)\' qf=description v=\'nokia lumia and\'}")',
             raw_query)
 
+        # Facets
         q = (
             SolrSearcher().search()
             .facet('category', 'model', mincount=5)
@@ -117,6 +118,32 @@ class QueryTest(TestCase):
         self.assertNotIn('facet.field=manufacturer', raw_query)
         self.assertNotIn('f.manufacturer.facet.limit=10', raw_query)
         self.assertNotIn('facet.query=is_active:true', raw_query)
+
+        # Grouping
+        q = (
+            SolrSearcher().search()
+            .group(limit=4, facet=True)
+            .group_field('company')
+            .group_query(X(status=0), X(visible=True))
+            .group_func(func.termfreq('text', "'term'"))
+        )
+        raw_query = str(q)
+        self.assertIn('group=true', raw_query)
+        self.assertIn('group.ngroups=true', raw_query)
+        self.assertIn('group.limit=4', raw_query)
+        self.assertIn('group.facet=true', raw_query)
+        self.assertIn('group.field=company', raw_query)
+        self.assertIn('group.query=status:0 AND visible:true', raw_query)
+        self.assertIn("group.func=termfreq(text,'term')", raw_query)
+        q = q.group(None)
+        raw_query = str(q)
+        self.assertNotIn('group=true', raw_query)
+        self.assertNotIn('group.ngroups=true', raw_query)
+        self.assertNotIn('group.limit=4', raw_query)
+        self.assertNotIn('group.facet=true', raw_query)
+        self.assertNotIn('group.field=company', raw_query)
+        self.assertNotIn('group.query=status:0 AND visible:true', raw_query)
+        self.assertNotIn("group.func=termfreq(text,'term')", raw_query)
     
     def test_filter(self):
         q = SolrSearcher().search()
@@ -312,7 +339,7 @@ class QueryTest(TestCase):
             self.assertEqual(cat_ex_facet.values[3].count, 19083)
             self.assertEqual(cat_ex_facet.values[3].instance, (3540208, '3540208 3540208'))
             
-    def test_facet_field(self):
+    def test_facet_query(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):
             s.solrs_read[0]._send_request.return_value = '''
@@ -551,6 +578,283 @@ class QueryTest(TestCase):
             self.assertEqual(facet.values[2].count, 3)
             self.assertRaises(IndexError, lambda: facet.values[3])
 
+    def test_group_query(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "grouped": {
+    "price:[1000 TO 2000]": {
+      "matches": 55,
+      "doclist": {
+        "numFound": 7,
+        "start": 0,
+        "docs": [
+          {
+            "id": "12",
+            "name": "Test name"
+          },
+          {
+            "id": "13"
+          }
+        ]
+      }
+    },
+    "status:666": {
+      "matches": 55,
+      "doclist": {
+        "numFound": 0,
+        "start": 0,
+        "docs": []
+      }
+    },
+    "(visible:true OR status:1)": {
+      "matches": 55,
+      "doclist": {
+        "numFound": 1,
+        "start": 0,
+        "docs": [
+          {
+            "id": "4",
+            "name": "Test 2"
+          }
+        ]
+      }
+    }
+  }
+}
+'''
+            q = (
+                s.search()
+                .group(limit=2)
+                .group_query(price__range=[1000, 2000])
+                .group_query(status=666)
+                .group_query(X(visible=True) | X(status=1))
+            )
+            raw_query = str(q)
+
+            self.assertIn('group=true', raw_query)
+            self.assertIn('group.limit=2', raw_query)
+            self.assertIn('group.query=price:[1000 TO 2000]', raw_query)
+            self.assertIn('group.query=status:666', raw_query)
+            self.assertIn('group.query=(visible:true OR status:1)', raw_query)
+
+            r = q.results
+            price_grouped = r.get_grouped(X(price__range=[1000, 2000]))
+            self.assertEqual(price_grouped.matches, 55)
+            self.assertEqual(price_grouped.ndocs, 7)
+            self.assertEqual(price_grouped.start, 0)
+            self.assertEqual(len(price_grouped.docs), 2)
+            self.assertEqual(price_grouped.docs[0].id, '12')
+            self.assertEqual(price_grouped.docs[0].name, 'Test name')
+            self.assertEqual(price_grouped.docs[1].id, '13')
+            status_grouped = r.get_grouped(X(status=666))
+            self.assertEqual(status_grouped.matches, 55)
+            self.assertEqual(status_grouped.ndocs, 0)
+            self.assertEqual(status_grouped.start, 0)
+            self.assertEqual(len(status_grouped.docs), 0)
+            other_grouped = r.get_grouped(X(visible=True) | X(status=1))
+            self.assertEqual(other_grouped.matches, 55)
+            self.assertEqual(other_grouped.ndocs, 1)
+            self.assertEqual(other_grouped.start, 0)
+            self.assertEqual(len(other_grouped.docs), 1)
+            self.assertEqual(other_grouped.docs[0].id, '4')
+            self.assertEqual(other_grouped.docs[0].name, 'Test 2')
+
+    def test_group_func(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "grouped": {
+    "termfreq(name,'test')": {
+      "matches": 63,
+      "ngroups": 3,
+      "groups": [
+        {
+          "groupValue": 0,
+          "doclist": {
+            "numFound": 418,
+            "start": 0,
+            "docs": [
+              {
+                "id": "4"
+              },
+              {
+                "id": "6"
+              }
+            ]
+          }
+        },
+        {
+          "groupValue": 1,
+          "doclist": {
+            "numFound": 13,
+            "start": 0,
+            "docs": [
+              {
+                "id": "70"
+              },
+              {
+                "id": "84"
+              }
+            ]
+          }
+        },
+        {
+          "groupValue": 2,
+          "doclist": {
+            "numFound": 1,
+            "start": 0,
+            "docs": [
+              {
+                "id": "57"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "sum(product(company,1000),status)": {
+      "matches": 63,
+      "ngroups": 18,
+      "groups": [
+        {
+          "groupValue": 6000,
+          "doclist": {
+            "numFound": 7,
+            "start": 0,
+            "docs": [
+              {
+                "id": "4"
+              },
+              {
+                "id": "6"
+              }
+            ]
+          }
+        },
+        {
+          "groupValue": 10000,
+          "doclist": {
+            "numFound": 3,
+            "start": 0,
+            "docs": [
+              {
+                "id": "80"
+              },
+              {
+                "id": "26"
+              }
+            ]
+          }
+        },
+        {
+          "groupValue": 8000,
+          "doclist": {
+            "numFound": 9,
+            "start": 0,
+            "docs": [
+              {
+                "id": "5"
+              },
+              {
+                "id": "22"
+              }
+            ]
+          }
+        },
+        {
+          "groupValue": 7000,
+          "doclist": {
+            "numFound": 70,
+            "start": 0,
+            "docs": [
+              {
+                "id": "14323732"
+              },
+              {
+                "id": "13737185"
+              }
+            ]
+          }
+        },
+        {
+          "groupValue": 1006,
+          "doclist": {
+            "numFound": 1,
+            "start": 0,
+            "docs": [
+              {
+                "id": "9"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+'''
+            q = (
+                s.search()
+                .group(limit=2)
+                .group_func(func.termfreq('name', "'test'"))
+                .group_func(func.sum(func.product('company', 1000), 'status'))
+                .limit(5)
+            )
+            raw_query = str(q)
+
+            self.assertIn('group=true', raw_query)
+            self.assertIn('group.limit=2', raw_query)
+            self.assertIn('group.ngroups=true', raw_query)
+            self.assertIn("group.func=termfreq(name,'test')", raw_query)
+            self.assertIn('group.func=sum(product(company,1000),status)', raw_query)
+            self.assertIn('rows=5', raw_query)
+
+            r = q.results
+            term_grouped = r.get_grouped(func.termfreq('name', "'test'"))
+            self.assertEqual(term_grouped.matches, 63)
+            self.assertEqual(term_grouped.ngroups, 3)
+            self.assertEqual(term_grouped.ndocs, None)
+            self.assertEqual(term_grouped.start, None)
+            self.assertEqual(len(term_grouped.docs), 0)
+            self.assertEqual(len(term_grouped.groups), 3)
+            self.assertEqual(term_grouped.groups[0].value, 0)
+            self.assertEqual(term_grouped.groups[0].ndocs, 418)
+            self.assertEqual(term_grouped.groups[0].start, 0)
+            self.assertEqual(len(term_grouped.groups[0].docs), 2)
+            self.assertEqual(term_grouped.groups[0].docs[0].id, '4')
+            self.assertEqual(term_grouped.groups[0].docs[1].id, '6')
+            self.assertEqual(term_grouped.groups[1].value, 1)
+            self.assertEqual(term_grouped.groups[1].ndocs, 13)
+            self.assertEqual(term_grouped.groups[1].start, 0)
+            self.assertEqual(len(term_grouped.groups[1].docs), 2)
+            self.assertEqual(term_grouped.groups[1].docs[0].id, '70')
+            self.assertEqual(term_grouped.groups[1].docs[1].id, '84')
+            self.assertEqual(term_grouped.groups[2].value, 2)
+            self.assertEqual(term_grouped.groups[2].ndocs, 1)
+            self.assertEqual(term_grouped.groups[2].start, 0)
+            self.assertEqual(len(term_grouped.groups[2].docs), 1)
+            self.assertEqual(term_grouped.groups[2].docs[0].id, '57')
+            company_status_grouped = r.get_grouped(func.sum(func.product('company', 1000), 'status'))
+            self.assertEqual(company_status_grouped.matches, 63)
+            self.assertEqual(company_status_grouped.ngroups, 18)
+            self.assertEqual(company_status_grouped.ndocs, None)
+            self.assertEqual(company_status_grouped.start, None)
+            self.assertEqual(len(company_status_grouped.groups), 5)
+            self.assertEqual(company_status_grouped.groups[0].value, 6000)
+            self.assertEqual(company_status_grouped.groups[0].ndocs, 7)
+            self.assertEqual(company_status_grouped.groups[0].start, 0)
+            self.assertEqual(len(company_status_grouped.groups[0].docs), 2)
+            self.assertEqual(company_status_grouped.groups[0].docs[0].id, '4')
+            self.assertEqual(company_status_grouped.groups[0].docs[1].id, '6')
+            self.assertEqual(company_status_grouped.groups[-1].value, 1006)
+            self.assertEqual(company_status_grouped.groups[-1].ndocs, 1)
+            self.assertEqual(company_status_grouped.groups[-1].start, 0)
+            self.assertEqual(len(company_status_grouped.groups[-1].docs), 1)
+            self.assertEqual(company_status_grouped.groups[-1].docs[0].id, '9')
+
     def test_search_grouped_main(self):
         class TestSearcher(SolrSearcher):
             def instance_mapper(self, ids, db_query=None):
@@ -566,7 +870,10 @@ class QueryTest(TestCase):
       "ngroups":109,
       "groups":[{
           "groupValue":"1",
-          "doclist":{"numFound":9,"start":0,"docs":[
+          "doclist":{
+            "numFound":9,
+            "start":0,
+            "docs":[
               {
                 "id":"111",
                 "name":"Test 1",
@@ -620,7 +927,8 @@ class QueryTest(TestCase):
             q = q.facet_field('tag', _local_params={'ex': 'tag'})
             q = q.facet_query(price__lte=100,
                               _local_params=[('ex', 'price'), ('cache', False)])
-            q = q.group('company', limit=3, _instance_mapper=_obj_mapper)
+            q = q.group(limit=3)
+            q = q.group_field('company', _instance_mapper=_obj_mapper)
             q = q.filter(category=13, _local_params={'tag': 'category'})
             q = q.stats('price')
             q = q.order_by('-date_created')
@@ -647,7 +955,7 @@ class QueryTest(TestCase):
             r = q.results
             grouped = r.get_grouped('company')
             self.assertEqual(grouped.ngroups, 109)
-            self.assertEqual(grouped.ndocs, 281)
+            self.assertEqual(grouped.matches, 281)
             self.assertEqual(grouped.groups[0].ndocs, 9)
             self.assertEqual(grouped.groups[0].value, '1')
             self.assertEqual(grouped.groups[0].instance.name, '1 1')

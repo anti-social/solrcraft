@@ -1,6 +1,7 @@
 from itertools import chain
 
 from .util import LocalParams, X, make_fq
+from .compat import force_unicode
 
 
 class SolrResults(object):
@@ -46,8 +47,11 @@ class SolrResults(object):
         return iter(self.docs)
     
     def get_grouped(self, key):
+        if isinstance(key, X):
+            key = make_fq(key)
+        key = force_unicode(key)
         for grouped in self.groupeds:
-            if grouped.field == key:
+            if grouped.key == key:
                 return grouped
 
     def get_stats_field(self, field):

@@ -7,11 +7,13 @@ if not PY2:
     string_types = (str,)
     binary_type = str
     unichr = chr
+    int_types = (int, long)
 else:
     text_type = unicode
     string_types = (str, unicode)
     binary_type = bytes
     unichr = unichr
+    int_types = (int,)
 
 
 if PY2:

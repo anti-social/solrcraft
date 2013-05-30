@@ -2,7 +2,8 @@
 from __future__ import unicode_literals
 
 
-from .pysolr import force_unicode
+from .util import SafeUnicode, process_value, maybe_wrap_literal
+from .compat import force_unicode
 
 
 # http://wiki.apache.org/solr/FunctionQuery/
@@ -48,12 +49,12 @@ class Function(object):
         parts.append(
             '{}({}){}'.format(
                 self.name,
-                ','.join(force_unicode(a) for a in self.args),
+                ','.join(maybe_wrap_literal(process_value(a)) for a in self.args),
                 weight
-                )
             )
+        )
         for other in self.others:
-            parts.append(str(other))
+            parts.append(force_unicode(other))
         return ' '.join(parts)
 
 def function_factory(cls_name, name):

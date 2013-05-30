@@ -13,7 +13,7 @@ from .compat import PY2, force_unicode, implements_to_string, reraise
 from .result import SolrResults
 from .stats import Stats
 from .facets import FacetField, FacetQuery, FacetPivot
-from .grouped import Grouped
+from .grouped import GroupedField, GroupedQuery, GroupedFunc
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
 
@@ -192,7 +192,13 @@ class SolrQuery(object):
         return clone
     clone = _clone
 
-    def _clean_params(self, name):
+    def _add_component(self, name, **kwargs):
+        self._params[name] = True
+        for p, v in kwargs.items():
+            if v is not None:
+                self._params['{}.{}'.format(name, p)] = v
+        
+    def _remove_component(self, name):
         for key in list(self._params.keys()):
             if key == name or key.startswith('{}.'.format(name)):
                 del self._params[key]
@@ -305,25 +311,18 @@ class SolrQuery(object):
               prefix=None, missing=None, method=None, **kwargs):
         clone = self._clone()
         if len(fields) == 1 and fields[0] is None:
-            clone._clean_params('facet')
+            clone._remove_component('facet')
             clone._facet_fields = []
             clone._facet_queries = []
             clone._facet_dates = []
             clone._facet_ranges = []
             clone._facet_pivots = []
-            return clone
-        for field in fields:
-            clone = clone.facet_field(field)
-        clone._params['facet'] = True
-        clone._params['facet.limit'] = limit
-        clone._params['facet.offset'] = offset
-        clone._params['facet.mincount'] = mincount
-        clone._params['facet.sort'] = sort
-        clone._params['facet.prefix'] = prefix
-        clone._params['facet.missing'] = missing
-        clone._params['facet.method'] = method
-        for p, v in kwargs.items():
-            clone._params['facet.{}'.format(p)] = v
+        else:
+            clone._add_component('facet', limit=limit, offset=offset,
+                                 mincount=mincount, sort=sort, prefix=prefix,
+                                 missing=missing, method=method, **kwargs)
+            for field in fields:
+                clone = clone.facet_field(field)
         return clone
 
     def facet_field(self, field, _local_params=None, _instance_mapper=None, **kwargs):
@@ -347,17 +346,38 @@ class SolrQuery(object):
         clone._facet_pivots.append(
             FacetPivot(*fields, local_params=local_params, **kwargs))
         return clone
-    
-    def group(self, field, _instance_mapper=None,
-              limit=1, offset=None, sort=None, main=None, ngroups=True,
-              format=None, truncate=None, facet=None, **kwargs):
+
+    def group(self, *fields, limit=None, offset=None, sort=None, main=None,
+              ngroups=True, format=None, truncate=None, facet=None, **kwargs):
         clone = self._clone()
-        grouped = Grouped(
-            field, self.searcher, instance_mapper=_instance_mapper,
-            limit=limit, offset=offset, sort=sort, main=main, ngroups=ngroups,
-            format=format, truncate=truncate, facet=facet,
-            **kwargs)
-        clone._groupeds.append(grouped)
+        if len(fields) == 1 and fields[0] is None:
+            clone._remove_component('group')
+            clone._groupeds = []
+        else:
+            clone._add_component('group', limit=limit, offset=offset, sort=sort,
+                                 main=main, ngroups=ngroups, format=format,
+                                 truncate=truncate, facet=facet, **kwargs)
+            for field in fields:
+                clone = clone.group_field(field)
+        return clone
+
+    def group_field(self, field, _instance_mapper=None):
+        clone = self._clone()
+        clone._groupeds.append(
+            GroupedField(field, self.searcher.group_cls, self.searcher.document_cls,
+                         instance_mapper=_instance_mapper))
+        return clone
+
+    def group_query(self, *args, **kwargs):
+        clone = self._clone()
+        clone._groupeds.append(
+            GroupedQuery(X(*args, **kwargs), self.searcher.group_cls, self.searcher.document_cls))
+        return clone
+
+    def group_func(self, func):
+        clone = self._clone()
+        clone._groupeds.append(
+            GroupedFunc(func, self.searcher.group_cls, self.searcher.document_cls))
         return clone
 
     def stats(self, field, facet_fields=None):

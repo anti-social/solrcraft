@@ -11,7 +11,7 @@ try:
 except ImportError:
     from ordereddict import OrderedDict
 
-from .compat import PY2, text_type, string_types, binary_type, force_unicode
+from .compat import PY2, text_type, string_types, binary_type, int_types, force_unicode
 from .tree import Node
 
 
@@ -187,12 +187,18 @@ class LocalParams(OrderedDict):
         return '{{!{0}}}'.format(' '.join(parts))
 
 def process_value(v, safe=False):
+    from .func import Function
+
     if v is True:
         return 'true'
     if v is False:
         return 'false'
+    if isinstance(v, int_types + (float,)):
+        return force_unicode(v)
     if isinstance(v, LocalParams):
         return '"{}"'.format(force_unicode(v))
+    if isinstance(v, Function):
+        return force_unicode(v)
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')
     if isinstance(v, string_types) and SOLR_DATETIME_RE.match(v):
@@ -204,6 +210,12 @@ def process_value(v, safe=False):
 def maybe_wrap_parentheses(v):
     if not re.match(r'".*"', v, re.DOTALL) and re.search(r'\s', v):
         return '({})'.format(v)
+    return v
+
+def maybe_wrap_literal(v):
+    if not re.match(r'".*"', v, re.DOTALL) and re.search(r'\s', v):
+        # ' is not in SPECIAL_CHARACTERS
+        return "'{}'".format(v.replace(r"'", r"\'"))
     return v
 
 def process_field(field, op, value):
