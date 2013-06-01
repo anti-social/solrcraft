@@ -56,7 +56,7 @@ class QueryTest(TestCase):
             SolrSearcher().search(X(name='test') | X(name__startswith='test'))
             .dismax()
             .qf([('name', 10), ('keywords', 2)])
-            .bf((func.linear('rank', 1, 0) ^ 100) + func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
+            .bf(func.linear('rank', 1, 0) * 100 + func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
             .field_weight('name', 5)
         )
         raw_query = str(q)

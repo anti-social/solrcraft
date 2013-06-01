@@ -187,7 +187,7 @@ class LocalParams(OrderedDict):
         return '{{!{0}}}'.format(' '.join(parts))
 
 def process_value(v, safe=False):
-    from .func import Function
+    from .functions import Function, FunctionList
 
     if v is True:
         return 'true'
@@ -197,7 +197,7 @@ def process_value(v, safe=False):
         return force_unicode(v)
     if isinstance(v, LocalParams):
         return '"{}"'.format(force_unicode(v))
-    if isinstance(v, Function):
+    if isinstance(v, (Function, FunctionList)):
         return force_unicode(v)
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%dT%H:%M:%SZ')

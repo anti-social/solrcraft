@@ -2,8 +2,8 @@
 from __future__ import unicode_literals
 
 
-from .util import SafeUnicode, process_value, maybe_wrap_literal
-from .compat import force_unicode
+from .util import process_value, maybe_wrap_literal
+from .compat import int_types
 
 
 # http://wiki.apache.org/solr/FunctionQuery/
@@ -26,43 +26,68 @@ SOLR_FUNCTIONS = [
     ]
 
 class Function(object):
-    name = None
-    
-    def __init__(self, *args, **kwargs):
-        self.name = self.name or self.__class__.__name__
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
         self.args = args
         self.weight = kwargs.get('weight')
-        self.others = kwargs.get('others', [])
 
-    def __xor__(self, other):
-        obj = type(self)(*self.args, weight=other)
-        return obj
+    def __mul__(self, weight):
+        if not isinstance(weight, int_types + (float,)):
+            raise TypeError("Weight must be 'int' or 'float', "
+                            "not '{}'".format(type(weight)))
+        return type(self)(self.name, *self.args, weight=weight)
 
     def __add__(self, other):
-        obj = type(self)(*self.args, weight=self.weight, others=self.others)
-        obj.others.append(other)
-        return obj
+        if not isinstance(other, Function):
+            raise TypeError("Only 'Function' object can be added, "
+                            "not '{}'".format(type(other)))
+        return FunctionList([self, other])
     
     def __str__(self):
-        weight = '^{}'.format(self.weight) if self.weight else ''
-        parts = []
-        parts.append(
-            '{}({}){}'.format(
-                self.name,
-                ','.join(maybe_wrap_literal(process_value(a)) for a in self.args),
-                weight
-            )
+        return '{}({}){}'.format(
+            self.name,
+            ','.join(maybe_wrap_literal(process_value(a)) for a in self.args),
+            '^{}'.format(self.weight) if self.weight else '',
         )
-        for other in self.others:
-            parts.append(force_unicode(other))
-        return ' '.join(parts)
 
-def function_factory(cls_name, name):
-    return type(str(cls_name), (Function,), {'name': name})
+
+class FunctionList(object):
+    def __init__(self, functions):
+        self.functions = list(functions)
+
+    def __add__(self, func):
+        if not isinstance(func, Function):
+            raise TypeError("Only 'Function' object can be added, "
+                            "not '{}'".format(type(func)))
+        return type(self)(self.functions + [func])
+
+    def __str__(self):
+        return ' '.join(process_value(f) for f in self.functions)
+
+
+def _implements_solr_functions(cls):
+    def set_func(func_name, name):
+        setattr(cls, func_name,
+                property(lambda self: cls(name)))
     
-for _func_name in SOLR_FUNCTIONS:
-    if isinstance(_func_name, tuple):
-        _name, _cls_name  = _func_name
-    else:
-        _name, _cls_name = _func_name, _func_name
-    globals()[_cls_name] = function_factory(_cls_name, _name)
+    for func_name in SOLR_FUNCTIONS:
+        if isinstance(func_name, tuple):
+            name, func_name  = func_name
+        else:
+            name, func_name = func_name, func_name
+        set_func(func_name, name)
+    return cls
+    
+
+@_implements_solr_functions
+class _FunctionGenerator(object):
+    def __init__(self, name=None):
+        self.__name = name
+
+    def __getattr__(self, name):
+        if name.endswith('_'):
+            name = name[0:-1]
+        return _FunctionGenerator(name)
+
+    def __call__(self, *args, **kwargs):
+        return Function(self.__name, *args, **kwargs)
