@@ -24,8 +24,6 @@ class Grouped(object):
         params = {}
         params['group'] = True
         params['group.{}'.format(self.param_name)] = [self.key]
-        for p, v in self.grouped_params.items():
-            params['group.{}'.format(p)] = v
         return params
 
     def process_data(self, results):

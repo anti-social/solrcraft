@@ -307,8 +307,30 @@ class SolrQuery(object):
         clone._params[param_name] = value
         return clone
 
-    def facet(self, *fields, limit=None, offset=None, mincount=None, sort=None,
-              prefix=None, missing=None, method=None, **kwargs):
+    def facet(self, *fields, **facet_params):
+        """Turns on/off facets.
+        Also can set facets and global facet parameters.
+
+        ``facet_params``,
+        for more details see
+        http://wiki.apache.org/solr/SimpleFacetParameters#Field_Value_Faceting_Parameters ::
+            ``limit`` - the maximum number of facet values
+            ``offset`` - an offset into the list of facet values
+            ``mincount`` - the minimum counts for facet values
+            ``sort`` - 'count'/'index', if 'index' orders facet values by
+            ``prefix`` - filters facet values
+            ``missing`` - True/False, use ``mincount`` instead
+            ``method`` - 'enum'/'fc'/'fcs'
+        
+        Usage::
+
+            # Turns on facets,
+            # set facet by category field and 2 global facet parameters
+            search_query = search_query.facet('category', mincount=1, limit=20)
+
+            # Turns off facets
+            search_query = search_query.facet(None)
+        """
         clone = self._clone()
         if len(fields) == 1 and fields[0] is None:
             clone._remove_component('facet')
@@ -318,9 +340,7 @@ class SolrQuery(object):
             clone._facet_ranges = []
             clone._facet_pivots = []
         else:
-            clone._add_component('facet', limit=limit, offset=offset,
-                                 mincount=mincount, sort=sort, prefix=prefix,
-                                 missing=missing, method=method, **kwargs)
+            clone._add_component('facet', **facet_params)
             for field in fields:
                 clone = clone.facet_field(field)
         return clone
@@ -347,16 +367,41 @@ class SolrQuery(object):
             FacetPivot(*fields, local_params=local_params, **kwargs))
         return clone
 
-    def group(self, *fields, limit=None, offset=None, sort=None, main=None,
-              ngroups=True, format=None, truncate=None, facet=None, **kwargs):
+    def group(self, *fields, **group_params):
+        """Turns on/off result grouping.
+        Also can set groups and global group parameters.
+
+        ``**group_params``,
+        see http://wiki.apache.org/solr/FieldCollapsing#Request_Parameters ::
+            ``limit`` - number of documents per group
+            ``offset`` - offset of the document list of each group
+            ``sort`` - how to sort documents within a single group
+            ``ngroups`` - True/False, if True includes the total number of groups,
+                useful for pagination, default True
+            ``format`` - 'grouped'/'simple', if 'single' represents grouped 
+                result as single flat list
+            ``main`` - True/False, if True turns on non grouped result,
+                only last grouping command is used
+            ``truncate`` - True/False, if True computes facets counts based on
+                the most relavant document
+            ``facet`` - True/False, if True computes facets based on groups
+        
+        Usage::
+
+            # Set 2 grouped results by company and model fields
+            # with 5 documents per group
+            search_query = search_query.group('company', 'model', limit=5)
+
+            # Truns off result grouping
+            search_query = search_query.group(None)
+        """
         clone = self._clone()
+        group_params.setdefault('ngroups', True)
         if len(fields) == 1 and fields[0] is None:
             clone._remove_component('group')
             clone._groupeds = []
         else:
-            clone._add_component('group', limit=limit, offset=offset, sort=sort,
-                                 main=main, ngroups=ngroups, format=format,
-                                 truncate=truncate, facet=facet, **kwargs)
+            clone._add_component('group', **group_params)
             for field in fields:
                 clone = clone.group_field(field)
         return clone
