@@ -100,6 +100,8 @@ class QueryTest(TestCase):
             .facet('category', 'model', mincount=5)
             .facet_field('manufacturer', limit=10)
             .facet_query(X(is_active=True))
+            .facet_range('price_unit', start=0, end=1000, gap=100,
+                         _local_params={'key': 'price'})
         )
         raw_query = str(q)
         self.assertIn('facet=true', raw_query)
@@ -109,6 +111,10 @@ class QueryTest(TestCase):
         self.assertIn('facet.field=manufacturer', raw_query)
         self.assertIn('f.manufacturer.facet.limit=10', raw_query)
         self.assertIn('facet.query=is_active:true', raw_query)
+        self.assertIn('facet.range={!key=price}price_unit', raw_query)
+        self.assertIn('f.price_unit.facet.range.start=0', raw_query)
+        self.assertIn('f.price_unit.facet.range.end=1000', raw_query)
+        self.assertIn('f.price_unit.facet.range.gap=100', raw_query)
         q = q.facet(None)
         raw_query = str(q)
         self.assertNotIn('facet=true', raw_query)
@@ -339,6 +345,129 @@ class QueryTest(TestCase):
             self.assertEqual(cat_ex_facet.values[3].count, 19083)
             self.assertEqual(cat_ex_facet.values[3].instance, (3540208, '3540208 3540208'))
             
+    def test_facet_range(self):
+        s = SolrSearcher('http://example.com:8180/solr')
+        with patch.object(s.solrs_read[0], '_send_request'):
+            s.solrs_read[0]._send_request.return_value = '''
+{
+  "response": {
+    "numFound": 19083,
+    "start": 0,
+    "docs": []
+  },
+  "facet_counts": {
+    "facet_queries": {},
+    "facet_ranges": {
+      "price": {
+        "counts": [
+          "0.0",
+          1370,
+          "30.0",
+          404,
+          "60.0",
+          207,
+          "90.0",
+          132
+        ],
+        "gap": 30,
+        "start": 0,
+        "end": 120
+      },
+      "date_modified": {
+        "counts": [
+          "2013-05-29T00:00:00Z",
+          143,
+          "2013-05-30T00:00:00Z",
+          29,
+          "2013-05-31T00:00:00Z",
+          573,
+          "2013-06-01T00:00:00Z",
+          502,
+          "2013-06-02T00:00:00Z",
+          0,
+          "2013-06-03T00:00:00Z",
+          480,
+          "2013-06-04T00:00:00Z",
+          400,
+          "2013-06-05T00:00:00Z",
+          0
+        ],
+        "gap": "+1DAY",
+        "start": "2013-05-29T00:00:00Z",
+        "end": "2013-06-06T00:00:00Z"
+      }
+    }
+  }
+}
+'''
+            q = s.search()
+            q = q.facet_range('price_unit', start=0, end=100, gap=30,
+                              _local_params={'ex': 'price', 'key': 'price'})
+            q = q.facet_range('date_modified',
+                              start='NOW/DAY-7DAYS', end='NOW/DAY+1DAY', gap='+1DAY')
+
+            raw_query = str(q)
+
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.range={!ex=price key=price}price_unit', raw_query)
+            self.assertIn('f.price_unit.facet.range.start=0', raw_query)
+            self.assertIn('f.price_unit.facet.range.end=100', raw_query)
+            self.assertIn('f.price_unit.facet.range.gap=30', raw_query)
+            self.assertIn('facet.range=date_modified', raw_query)
+            self.assertIn('f.date_modified.facet.range.start=NOW/DAY-7DAYS', raw_query)
+            self.assertIn('f.date_modified.facet.range.end=NOW/DAY%2B1DAY', raw_query)
+            self.assertIn('f.date_modified.facet.range.gap=%2B1DAY', raw_query)
+
+            r = q.results
+
+            price_facet = r.get_facet_range('price')
+            self.assertEqual(price_facet.start, 0)
+            self.assertEqual(price_facet.end, 120)
+            self.assertEqual(price_facet.gap, 30)
+            self.assertEqual(len(price_facet.values), 4)
+            self.assertAlmostEqual(price_facet.values[0].start, 0)
+            self.assertAlmostEqual(price_facet.values[0].end, 30)
+            self.assertEqual(price_facet.values[0].count, 1370)
+            self.assertAlmostEqual(price_facet.values[1].start, 30)
+            self.assertAlmostEqual(price_facet.values[1].end, 60)
+            self.assertEqual(price_facet.values[1].count, 404)
+            self.assertAlmostEqual(price_facet.values[2].start, 60)
+            self.assertAlmostEqual(price_facet.values[2].end, 90)
+            self.assertEqual(price_facet.values[2].count, 207)
+            self.assertAlmostEqual(price_facet.values[3].start, 90)
+            self.assertAlmostEqual(price_facet.values[3].end, 120)
+            self.assertEqual(price_facet.values[3].count, 132)
+            
+            date_facet = r.get_facet_range('date_modified')
+            self.assertEqual(date_facet.start, datetime(2013, 5, 29))
+            self.assertEqual(date_facet.end, datetime(2013, 6, 6))
+            self.assertEqual(date_facet.gap, '+1DAY')
+            self.assertEqual(len(date_facet.values), 8)
+            self.assertEqual(date_facet.values[0].start, datetime(2013, 5, 29))
+            self.assertEqual(date_facet.values[0].end, datetime(2013, 5, 30))
+            self.assertEqual(date_facet.values[0].count, 143)
+            self.assertEqual(date_facet.values[1].start, datetime(2013, 5, 30))
+            self.assertEqual(date_facet.values[1].end, datetime(2013, 5, 31))
+            self.assertEqual(date_facet.values[1].count, 29)
+            self.assertEqual(date_facet.values[2].start, datetime(2013, 5, 31))
+            self.assertEqual(date_facet.values[2].end, datetime(2013, 6, 1))
+            self.assertEqual(date_facet.values[2].count, 573)
+            self.assertEqual(date_facet.values[3].start, datetime(2013, 6, 1))
+            self.assertEqual(date_facet.values[3].end, datetime(2013, 6, 2))
+            self.assertEqual(date_facet.values[3].count, 502)
+            self.assertEqual(date_facet.values[4].start, datetime(2013, 6, 2))
+            self.assertEqual(date_facet.values[4].end, datetime(2013, 6, 3))
+            self.assertEqual(date_facet.values[4].count, 0)
+            self.assertEqual(date_facet.values[5].start, datetime(2013, 6, 3))
+            self.assertEqual(date_facet.values[5].end, datetime(2013, 6, 4))
+            self.assertEqual(date_facet.values[5].count, 480)
+            self.assertEqual(date_facet.values[6].start, datetime(2013, 6, 4))
+            self.assertEqual(date_facet.values[6].end, datetime(2013, 6, 5))
+            self.assertEqual(date_facet.values[6].count, 400)
+            self.assertEqual(date_facet.values[7].start, datetime(2013, 6, 5))
+            self.assertEqual(date_facet.values[7].end, datetime(2013, 6, 6))
+            self.assertEqual(date_facet.values[7].count, 0)
+
     def test_facet_query(self):
         s = SolrSearcher('http://example.com:8180/solr')
         with patch.object(s.solrs_read[0], '_send_request'):

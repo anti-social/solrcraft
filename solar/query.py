@@ -12,7 +12,7 @@ from .pysolr import SolrError
 from .compat import PY2, force_unicode, implements_to_string, reraise
 from .result import SolrResults
 from .stats import Stats
-from .facets import FacetField, FacetQuery, FacetPivot
+from .facets import FacetField, FacetRange, FacetQuery, FacetPivot
 from .grouped import GroupedField, GroupedQuery, GroupedFunc
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
@@ -60,7 +60,10 @@ class SolrQuery(object):
 
     def __str__(self):
         def simple_quote(s):
-            return force_unicode(s).replace('%', '%25').replace('&', '%26')
+            return force_unicode(s) \
+                .replace('%', '%25') \
+                .replace('&', '%26') \
+                .replace('+', '%2B')
         
         params = []
         params.append(('q', self._make_q()))
@@ -351,6 +354,17 @@ class SolrQuery(object):
         clone._facet_fields.append(
             FacetField(field, local_params=local_params,
                        instance_mapper=_instance_mapper, **kwargs))
+        return clone
+
+    def facet_range(self, field, start, end, gap,
+                    hardend=None, other=None, include=None,
+                    _local_params=None, **kwargs):
+        clone = self._clone()
+        local_params = LocalParams(_local_params)
+        clone._facet_ranges.append(
+            FacetRange(field, start, end, gap,
+                       hardend=hardend, other=other, include=include,
+                       local_params=local_params, **kwargs))
         return clone
 
     def facet_query(self, *args, **kwargs):

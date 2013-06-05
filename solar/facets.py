@@ -3,6 +3,18 @@ from __future__ import unicode_literals
 from copy import deepcopy
 
 from .util import LocalParams, X, make_fq
+from .pysolr import Solr
+
+
+def zip_counts(counts, n, over=0):
+    acc = ()
+    for v in counts:
+        acc = acc + (v,)
+        if len(acc) % (n + over) == 0:
+            yield acc
+            acc = acc[n:]
+    if len(acc) == n:
+        yield acc + (None,) * over
 
 
 class FacetField(object):
@@ -40,9 +52,9 @@ class FacetField(object):
         self.values = []
         raw_facet_fields = results.raw_results.facets['facet_fields']
         facet_data = raw_facet_fields[self.key]
-        for i in range(0, len(facet_data), 2):
+        for val, count in zip_counts(facet_data, 2):
             self.values.append(
-                FacetValue(facet_data[i], facet_data[i+1], facet=self))
+                FacetValue(val, count, facet=self))
 
     def _populate_instances(self):
         values = [fv.value for fv in self.values]
@@ -66,7 +78,60 @@ class FacetValue(object):
             else:
                 self._instance = None
         return self._instance
-        
+
+
+class FacetRange(object):
+    def __init__(self, field, start, end, gap,
+                 local_params=None, **facet_params):
+        self.field = field
+        self.orig_start = self.start = start
+        self.orig_end = self.end = end
+        self.orig_gap = self.gap = gap
+        self.local_params = local_params or LocalParams()
+        self.key = self.local_params.get('key', self.field)
+        self.facet_params = facet_params
+        self.values = []
+
+    def get_params(self):
+        solr = Solr(None)
+        params = {}
+        params['facet'] = True
+        params['facet.range'] = [make_fq(X(self.field), self.local_params)]
+        params['f.{}.facet.range.start'.format(self.field)] = self.orig_start
+        params['f.{}.facet.range.end'.format(self.field)] = self.orig_end
+        gap = self.orig_gap
+        if isinstance(gap, (list, tuple)):
+            gap = ','.join(gap)
+        params['f.{}.facet.range.gap'.format(self.field)] = gap
+        for p, v in self.facet_params.items():
+            params['f.{}.facet.range.{}'.format(self.field, p)] = v
+        return params
+
+    def process_data(self, results):
+        solr = results.searcher.solrs_read[0]
+        raw_facet_data = results.raw_results.facets \
+                                            .get('facet_ranges', {}) \
+                                            .get(self.key, {})
+        self.start = solr._to_python(raw_facet_data.get('start', self.start))
+        self.end = solr._to_python(raw_facet_data.get('end', self.end))
+        self.gap = solr._to_python(raw_facet_data.get('gap', self.gap))
+        facet_counts = raw_facet_data.get('counts', [])
+        for start, count, end in zip_counts(facet_counts, 2, 1):
+            if end is None:
+                end = self.end
+            start = solr._to_python(start)
+            end = solr._to_python(end)
+            self.values.append(
+                FacetRangeValue(start, end, count, facet=self))
+
+
+class FacetRangeValue(object):
+    def __init__(self, start, end, count, facet=None):
+        self.count = count
+        self.start = start
+        self.end = end
+        self.facet = facet
+
         
 class FacetQuery(object):
     def __init__(self, fq, local_params=None):
