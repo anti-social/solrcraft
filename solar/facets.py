@@ -19,20 +19,21 @@ def zip_counts(counts, n, over=0):
 
 class FacetField(object):
     def __init__(self, field, local_params=None, instance_mapper=None,
-                 **kwargs):
+                 coerce=None, **facet_params):
         self.field = field
         self.local_params = local_params or LocalParams()
         self.key = self.local_params.get('key', self.field)
-        self.facet_params = kwargs
+        self.coerce = coerce or (lambda v: v)
+        self.facet_params = facet_params
         self.values = []
         self._instance_mapper = instance_mapper
 
     def __deepcopy__(self, memodict):
         # Fix for http://bugs.python.org/issue1515
         # self._instance_mapper can be instance method
-        obj = type(self)(self.field, self.local_params,
+        obj = type(self)(self.field, local_params=self.local_params,
                          instance_mapper=self._instance_mapper,
-                         **self.facet_params)
+                         coerce=self.coerce, **self.facet_params)
         return obj
 
     def instance_mapper(self, ids):
@@ -54,7 +55,7 @@ class FacetField(object):
         facet_data = raw_facet_fields[self.key]
         for val, count in zip_counts(facet_data, 2):
             self.values.append(
-                FacetValue(val, count, facet=self))
+                FacetValue(self.coerce(val), count, facet=self))
 
     def _populate_instances(self):
         values = [fv.value for fv in self.values]
@@ -82,18 +83,18 @@ class FacetValue(object):
 
 class FacetRange(object):
     def __init__(self, field, start, end, gap,
-                 local_params=None, **facet_params):
+                 local_params=None, coerce=None, **facet_params):
         self.field = field
         self.orig_start = self.start = start
         self.orig_end = self.end = end
         self.orig_gap = self.gap = gap
         self.local_params = local_params or LocalParams()
         self.key = self.local_params.get('key', self.field)
+        self.coerce = coerce or (lambda v: v)
         self.facet_params = facet_params
         self.values = []
 
     def get_params(self):
-        solr = Solr(None)
         params = {}
         params['facet'] = True
         params['facet.range'] = [make_fq(X(self.field), self.local_params)]
@@ -108,19 +109,19 @@ class FacetRange(object):
         return params
 
     def process_data(self, results):
-        solr = results.searcher.solrs_read[0]
         raw_facet_data = results.raw_results.facets \
                                             .get('facet_ranges', {}) \
                                             .get(self.key, {})
-        self.start = solr._to_python(raw_facet_data.get('start', self.start))
-        self.end = solr._to_python(raw_facet_data.get('end', self.end))
-        self.gap = solr._to_python(raw_facet_data.get('gap', self.gap))
+        self.start = self.coerce(raw_facet_data.get('start', self.start))
+        self.end = self.coerce(raw_facet_data.get('end', self.end))
+        self.gap = raw_facet_data.get('gap', self.gap)
         facet_counts = raw_facet_data.get('counts', [])
         for start, count, end in zip_counts(facet_counts, 2, 1):
+            start = self.coerce(start)
             if end is None:
                 end = self.end
-            start = solr._to_python(start)
-            end = solr._to_python(end)
+            else:
+                end = self.coerce(end)
             self.values.append(
                 FacetRangeValue(start, end, count, facet=self))
 

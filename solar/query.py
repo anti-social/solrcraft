@@ -348,23 +348,25 @@ class SolrQuery(object):
                 clone = clone.facet_field(field)
         return clone
 
-    def facet_field(self, field, _local_params=None, _instance_mapper=None, **kwargs):
+    def facet_field(self, field, _local_params=None, _instance_mapper=None,
+                    _coerce=None, **kwargs):
         clone = self._clone()
         local_params = LocalParams(_local_params)
         clone._facet_fields.append(
             FacetField(field, local_params=local_params,
-                       instance_mapper=_instance_mapper, **kwargs))
+                       instance_mapper=_instance_mapper, coerce=_coerce,
+                       **kwargs))
         return clone
 
     def facet_range(self, field, start, end, gap,
                     hardend=None, other=None, include=None,
-                    _local_params=None, **kwargs):
+                    _local_params=None, _coerce=None, **kwargs):
         clone = self._clone()
         local_params = LocalParams(_local_params)
         clone._facet_ranges.append(
             FacetRange(field, start, end, gap,
                        hardend=hardend, other=other, include=include,
-                       local_params=local_params, **kwargs))
+                       local_params=local_params, coerce=_coerce, **kwargs))
         return clone
 
     def facet_query(self, *args, **kwargs):

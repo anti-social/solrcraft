@@ -8,17 +8,12 @@ from mock import patch
 
 from solar import X, LocalParams
 from solar.searcher import SolrSearcher
+from solar.converters import bool_to_python
 from solar.queryfilter import (
     QueryFilter, Filter, FacetFilter, FacetFilterValue,
     PivotFilter, FacetPivotFilter,
     FacetQueryFilter, FacetQueryFilterValue, RangeFilter,
     OrderingFilter, OrderingValue)
-
-
-def as_bool(v):
-    if v == 'true':
-        return True
-    return False
 
 
 Obj = namedtuple('Obj', ['id', 'name'])
@@ -126,7 +121,7 @@ class QueryTest(TestCase):
                     'manu',
                     FacetPivotFilter('manufacturer', mincount=1),
                     FacetPivotFilter('model', _instance_mapper=_obj_mapper, limit=5),
-                    FacetPivotFilter('discount', coerce=as_bool)))
+                    FacetPivotFilter('discount', coerce=bool_to_python)))
 
             params = {
                 'manu': ['samsung:note', 'nokia:n900:false', 'nothing:']

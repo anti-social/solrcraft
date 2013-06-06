@@ -8,6 +8,7 @@ from mock import patch
 
 from solar.searcher import SolrSearcher
 from solar.util import SafeUnicode, X, LocalParams, make_fq
+from solar.converters import int_to_python, float_to_python, datetime_to_python
 from solar import func
 
 
@@ -314,7 +315,7 @@ class QueryTest(TestCase):
             q = q.filter(category=3540208, _local_params={'tag': 'cat'})
             q = q.facet(limit=5)
             q = q.facet_field('category', _instance_mapper=_obj_mapper,
-                              _local_params={'key': 'cat'})
+                              _local_params={'key': 'cat'}, _coerce=int_to_python)
             q = q.facet_field('category', _instance_mapper=_obj_mapper,
                               _local_params={'ex': 'cat', 'key': 'cat_ex'})
 
@@ -330,10 +331,10 @@ class QueryTest(TestCase):
 
             cat_facet = r.get_facet_field('cat')
             self.assertEqual(len(cat_facet.values), 5)
-            self.assertEqual(cat_facet.values[0].value, '3540208')
+            self.assertEqual(cat_facet.values[0].value, 3540208)
             self.assertEqual(cat_facet.values[0].count, 19083)
             self.assertEqual(cat_facet.values[0].instance, (3540208, '3540208 3540208'))
-            self.assertEqual(cat_facet.values[1].value, '1')
+            self.assertEqual(cat_facet.values[1].value, 1)
             self.assertEqual(cat_facet.values[1].count, 0)
             self.assertEqual(cat_facet.values[1].instance, (1, '1 1'))
             cat_ex_facet = r.get_facet_field('cat_ex')
@@ -402,9 +403,13 @@ class QueryTest(TestCase):
 '''
             q = s.search()
             q = q.facet_range('price_unit', start=0, end=100, gap=30,
-                              _local_params={'ex': 'price', 'key': 'price'})
+                              _local_params={'ex': 'price', 'key': 'price'},
+                              _coerce=float_to_python
+            )
             q = q.facet_range('date_modified',
-                              start='NOW/DAY-7DAYS', end='NOW/DAY+1DAY', gap='+1DAY')
+                              start='NOW/DAY-7DAYS', end='NOW/DAY+1DAY', gap='+1DAY',
+                              _coerce=datetime_to_python
+            )
 
             raw_query = str(q)
 
