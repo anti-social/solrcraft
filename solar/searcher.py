@@ -89,7 +89,7 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
         if not ids:
             return {}
 
-        ids = map(self.db_field_type, ids)
+        converted_ids_to_ids = {self.db_field_type(id): id for id in ids}
 
         if not db_query:
             db_query = self.get_db_query()
@@ -98,10 +98,13 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
             model = db_query._mapper_zero().class_
         else:
             model = self.model
-        db_query = db_query.filter(getattr(model, self.db_field).in_(ids))
+        db_query = db_query.filter(
+            getattr(model, self.db_field).in_(converted_ids_to_ids.keys()))
         instances = {}
         for obj in db_query:
-            instances[obj.id] = obj
+            orig_id = converted_ids_to_ids.get(obj.id)
+            if orig_id is not None:
+                instances[orig_id] = obj
 
         return instances
 

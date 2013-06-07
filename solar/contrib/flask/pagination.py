@@ -1,6 +1,7 @@
 # coding: utf-8
 from math import ceil
 
+
 class SolrQueryWrapper(object):
     """Solr returns total count with response.
     So we can get documents and count with one request.
