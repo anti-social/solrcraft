@@ -6,6 +6,7 @@ import logging
 import warnings
 from copy import copy, deepcopy
 from itertools import chain, starmap
+from functools import wraps
 
 from .pysolr import SolrError
 
@@ -18,6 +19,17 @@ from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
 
 
 log = logging.getLogger(__name__)
+
+
+def _with_clone(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        clone = self._clone()
+        res = fn(clone, *args, **kwargs)
+        if res is not None:
+            return res
+        return clone
+    return wrapper
 
 
 class SolrParameterSetter(object):
@@ -202,7 +214,10 @@ class SolrQuery(object):
         clone._db_query = self._db_query
         clone._iter_instances = self._iter_instances
         return clone
-    clone = _clone
+
+    @_with_clone
+    def clone(self):
+        pass
 
     def _add_component(self, name, **kwargs):
         self._params[name] = True
@@ -225,10 +240,9 @@ class SolrQuery(object):
             # catch AttributeError cause else __getattr__ will be called
             reraise(RuntimeError, RuntimeError(e.__class__.__name__, *e.args), sys.exc_info()[2])
 
+    @_with_clone
     def search(self, q):
-        clone = self._clone()
-        clone._q = q
-        return clone
+        self._q = q
 
     def all(self):
         return list(self.results)
@@ -236,32 +250,28 @@ class SolrQuery(object):
     def count(self):
         return self._clone()._fetch_results(only_count=True).ndocs
 
+    @_with_clone
     def instances(self):
-        clone = self._clone().only(self.searcher.unique_field)
-        clone._iter_instances = True
-        return clone
+        self._iter_instances = True
+        self._params['fl'] = [self.searcher.unique_field]
 
+    @_with_clone
     def filter(self, *args, **kwargs):
         local_params = LocalParams(kwargs.pop('_local_params', None))
-        clone = self._clone()
-        clone._fq.append((X(*args, **kwargs), local_params))
-        return clone
+        self._fq.append((X(*args, **kwargs), local_params))
 
+    @_with_clone
     def exclude(self, *args, **kwargs):
         local_params = LocalParams(kwargs.pop('_local_params', None))
-        clone = self._clone()
-        clone._fq.append((~X(*args, **kwargs), local_params))
-        return clone
+        self._fq.append((~X(*args, **kwargs), local_params))
 
+    @_with_clone
     def instance_mapper(self, instance_mapper):
-        clone = self._clone()
-        clone._instance_mapper = instance_mapper
-        return clone
+        self._instance_mapper = instance_mapper
 
+    @_with_clone
     def with_db_query(self, db_query):
-        clone = self._clone()
-        clone._db_query = db_query
-        return clone
+        self._db_query = db_query
 
     def only(self, *fields):
         return self.fl(fields)
@@ -272,34 +282,32 @@ class SolrQuery(object):
     def edismax(self):
         return self.defType('edismax')
 
+    @_with_clone
     def qf(self, fields):
-        clone = self._clone()
         if isinstance(fields, dict):
             fields = fields.items()
-        clone._params['qf'] = fields
-        return clone
+        self._params['qf'] = fields
 
+    @_with_clone
     def field_weight(self, field_name, weight=1):
-        clone = self._clone()
-        if 'qf' not in clone._params:
-            clone._params['qf'] = []
-        qf = clone._params['qf']
+        if 'qf' not in self._params:
+            self._params['qf'] = []
+        qf = self._params['qf']
         for i, (f, w) in enumerate(qf):
             if f == field_name:
                 qf[i] = (field_name, weight)
                 break
         else:
             qf.append((field_name, weight))
-        return clone
 
+    @_with_clone
     def order_by(self, *args):
-        clone = self._clone()
         if not args:
-            return clone
+            return
         if len(args) == 1 and args[0] is None:
-            clone._params['sort'] = None
-            return clone
-        fields = list(clone._params.get('sort', []))
+            self._params['sort'] = None
+            return
+        fields = list(self._params.get('sort', []))
         for field in args:
             if field is None:
                 continue
@@ -307,8 +315,7 @@ class SolrQuery(object):
                 fields.append('{} desc'.format(field[1:]))
             else:
                 fields.append('{} asc'.format(field))
-        clone._params['sort'] = tuple(fields)
-        return clone
+        self._params['sort'] = tuple(fields)
 
     def limit(self, n):
         return self.rows(n)
@@ -316,11 +323,11 @@ class SolrQuery(object):
     def offset(self, n):
         return self.start(n)
 
+    @_with_clone
     def set_param(self, param_name, value):
-        clone = self._clone()
-        clone._params[param_name] = value
-        return clone
+        self._params[param_name] = value
 
+    @_with_clone
     def facet(self, *fields, **facet_params):
         """Turns on/off facets.
         Also can set facets and global facet parameters.
@@ -345,55 +352,51 @@ class SolrQuery(object):
             # Turns off facets
             search_query = search_query.facet(None)
         """
-        clone = self._clone()
         if len(fields) == 1 and fields[0] is None:
-            clone._remove_component('facet')
-            clone._facet_fields = []
-            clone._facet_queries = []
-            clone._facet_dates = []
-            clone._facet_ranges = []
-            clone._facet_pivots = []
+            self._remove_component('facet')
+            self._facet_fields = []
+            self._facet_queries = []
+            self._facet_dates = []
+            self._facet_ranges = []
+            self._facet_pivots = []
         else:
-            clone._add_component('facet', **facet_params)
+            self._add_component('facet', **facet_params)
             for field in fields:
-                clone = clone.facet_field(field)
-        return clone
+                self = self.facet_field(field)
+            return self
 
+    @_with_clone
     def facet_field(self, field, _local_params=None, _instance_mapper=None,
                     _coerce=None, **kwargs):
-        clone = self._clone()
         local_params = LocalParams(_local_params)
-        clone._facet_fields.append(
+        self._facet_fields.append(
             FacetField(field, local_params=local_params,
                        instance_mapper=_instance_mapper, coerce=_coerce,
                        **kwargs))
-        return clone
 
+    @_with_clone
     def facet_range(self, field, start, end, gap,
                     hardend=None, other=None, include=None,
                     _local_params=None, _coerce=None, **kwargs):
-        clone = self._clone()
         local_params = LocalParams(_local_params)
-        clone._facet_ranges.append(
+        self._facet_ranges.append(
             FacetRange(field, start, end, gap,
                        hardend=hardend, other=other, include=include,
                        local_params=local_params, coerce=_coerce, **kwargs))
-        return clone
 
+    @_with_clone
     def facet_query(self, *args, **kwargs):
-        clone = self._clone()
         local_params = LocalParams(kwargs.pop('_local_params', None))
-        clone._facet_queries.append(
+        self._facet_queries.append(
             FacetQuery(X(*args, **kwargs), local_params=local_params))
-        return clone
         
+    @_with_clone
     def facet_pivot(self, *fields, **kwargs):
-        clone = self._clone()
         local_params = LocalParams(kwargs.pop('_local_params', None))
-        clone._facet_pivots.append(
+        self._facet_pivots.append(
             FacetPivot(*fields, local_params=local_params, **kwargs))
-        return clone
 
+    @_with_clone
     def group(self, *fields, **group_params):
         """Turns on/off result grouping.
         Also can set groups and global group parameters.
@@ -422,42 +425,41 @@ class SolrQuery(object):
             # Truns off result grouping
             search_query = search_query.group(None)
         """
-        clone = self._clone()
         group_params.setdefault('ngroups', True)
         if len(fields) == 1 and fields[0] is None:
-            clone._remove_component('group')
-            clone._groupeds = []
+            self._remove_component('group')
+            self._groupeds = []
         else:
-            clone._add_component('group', **group_params)
+            self._add_component('group', **group_params)
             for field in fields:
-                clone = clone.group_field(field)
-        return clone
+                self = self.group_field(field)
+            return self
 
+    @_with_clone
     def group_field(self, field, _instance_mapper=None):
-        clone = self._clone()
-        clone._groupeds.append(
-            GroupedField(field, self.searcher.group_cls, self.searcher.document_cls,
-                         instance_mapper=_instance_mapper))
-        return clone
+        self._groupeds.append(
+            GroupedField(
+                field, self.searcher.group_cls, self.searcher.document_cls,
+                instance_mapper=_instance_mapper))
 
+    @_with_clone
     def group_query(self, *args, **kwargs):
-        clone = self._clone()
-        clone._groupeds.append(
-            GroupedQuery(X(*args, **kwargs), self.searcher.group_cls, self.searcher.document_cls))
-        return clone
+        self._groupeds.append(
+            GroupedQuery(
+                X(*args, **kwargs), self.searcher.group_cls,
+                self.searcher.document_cls))
 
+    @_with_clone
     def group_func(self, func):
-        clone = self._clone()
-        clone._groupeds.append(
-            GroupedFunc(func, self.searcher.group_cls, self.searcher.document_cls))
-        return clone
+        self._groupeds.append(
+            GroupedFunc(
+                func, self.searcher.group_cls, self.searcher.document_cls))
 
+    @_with_clone
     def stats(self, field, facet_fields=None):
-        clone = self._clone()
-        clone._stats_fields.append(
+        self._stats_fields.append(
             Stats(field, facet_fields=facet_fields))
-        clone._params['stats'] = True
-        return clone
+        self._params['stats'] = True
 
     def get(self, *args, **kwargs):
         clone = self.filter(*args, **kwargs).limit(1)
