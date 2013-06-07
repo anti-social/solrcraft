@@ -56,6 +56,8 @@ class SolrQuery(object):
         self._instance_mapper = None
         self._db_query = None
 
+        self._iter_instances = False
+
         self._result_cache = None
 
     def __str__(self):
@@ -82,14 +84,17 @@ class SolrQuery(object):
 
     def __iter__(self):
         results = self._fetch_results()
-        return iter(results)
+        if self._iter_instances:
+            return iter(doc.instance for doc in results if doc.instance)
+        else:
+            return iter(results)
 
     def __getitem__(self, k):
         if not isinstance(k, (slice, int)):
             raise TypeError
 
         if self._result_cache is not None:
-            return self._result_cache.docs[k]
+            docs = self._result_cache.docs[k]
         else:
             if isinstance(k, slice):
                 start, stop = k.start, k.stop
@@ -100,7 +105,10 @@ class SolrQuery(object):
                     clone._params['rows'] = stop - start
                 return clone
             else:
-                return self._fetch_results().docs[k]
+                docs = self._fetch_results().docs[k]
+        if self._iter_instances:
+            return [doc.instance for doc in docs if doc.instance]
+        return docs
 
     def __getattr__(self, attr_name):
         # fix IPython
@@ -192,6 +200,7 @@ class SolrQuery(object):
         clone._params = deepcopy(self._params)
         clone._instance_mapper = self._instance_mapper
         clone._db_query = self._db_query
+        clone._iter_instances = self._iter_instances
         return clone
     clone = _clone
 
@@ -228,7 +237,9 @@ class SolrQuery(object):
         return self._clone()._fetch_results(only_count=True).ndocs
 
     def instances(self):
-        return self._clone(InstancesSolrQuery).only('id')
+        clone = self._clone().only(self.searcher.unique_field)
+        clone._iter_instances = True
+        return clone
 
     def filter(self, *args, **kwargs):
         local_params = LocalParams(kwargs.pop('_local_params', None))
@@ -452,17 +463,3 @@ class SolrQuery(object):
         clone = self.filter(*args, **kwargs).limit(1)
         if len(clone):
             return clone[0]
-
-
-class InstancesSolrQuery(SolrQuery):
-    def __iter__(self):
-        results = self._fetch_results()
-        return iter([doc.instance for doc in results if doc.instance])
-
-    def __getitem__(self, k):
-        res = super(InstancesSolrQuery, self).__getitem__(k)
-        if isinstance(res, SolrQuery):
-            return res
-        elif isinstance(res, list):
-            return [doc.instance for doc in res if doc.instance]
-        return res.instance

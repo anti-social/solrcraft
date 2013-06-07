@@ -9,6 +9,7 @@ from .util import SafeUnicode, X, make_q
 from .grouped import Group
 from .document import Document
 
+
 class SolrSearcherMeta(type):
     def __new__(mcs, name, bases, dct):
         cls = type.__new__(mcs, name, bases, dct)
@@ -20,14 +21,19 @@ class SolrSearcherMeta(type):
 
         return cls
 
+
 class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     solr_url = None
     solr_read_urls = None
     solr_write_urls = None
+
+    unique_field = 'id'
+
     model = None
     session = None
     db_field = 'id'
     db_field_type = int
+
     query_cls = SolrQuery
     group_cls = Group
     document_cls = Document
