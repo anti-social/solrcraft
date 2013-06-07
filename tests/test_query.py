@@ -1,7 +1,6 @@
 from __future__ import unicode_literals
 
 from datetime import datetime
-from unittest import TestCase
 from collections import namedtuple
 
 from mock import patch
@@ -10,6 +9,8 @@ from solar.searcher import SolrSearcher
 from solar.util import SafeUnicode, X, LocalParams, make_fq
 from solar.converters import int_to_python, float_to_python, datetime_to_python
 from solar import func
+
+from .base import TestCase
 
 
 Obj = namedtuple('Obj', ['id', 'name'])
@@ -213,9 +214,8 @@ class QueryTest(TestCase):
 
 
     def test_count(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request') as send_request:
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 181,
@@ -225,16 +225,15 @@ class QueryTest(TestCase):
 }
 '''
 
-            q = s.search()
+            q = self.searcher.search()
             self.assertEqual(q.count(), 181)
             self.assertEqual(q.count(), 181)
             self.assertEqual(send_request.call_count, 2)
 
 
     def test_iter_docs(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request') as send_request:
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 181,
@@ -263,7 +262,7 @@ class QueryTest(TestCase):
                     self.assertEqual(doc.id, canonical_doc['id'])
                     self.assertEqual(doc.name, canonical_doc['name'])
 
-            q = s.search()
+            q = self.searcher.search()
             check_docs(q.all(), canonical_docs)
             check_docs(list(q), canonical_docs)
             check_docs(iter(q), canonical_docs)
@@ -271,9 +270,8 @@ class QueryTest(TestCase):
 
 
     def test_facet_field(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 19083,
@@ -311,7 +309,7 @@ class QueryTest(TestCase):
   }
 }
 '''
-            q = s.search()
+            q = self.searcher.search()
             q = q.filter(category=3540208, _local_params={'tag': 'cat'})
             q = q.facet(limit=5)
             q = q.facet_field('category', _instance_mapper=_obj_mapper,
@@ -347,9 +345,8 @@ class QueryTest(TestCase):
             self.assertEqual(cat_ex_facet.values[3].instance, (3540208, '3540208 3540208'))
             
     def test_facet_range(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 19083,
@@ -401,7 +398,7 @@ class QueryTest(TestCase):
   }
 }
 '''
-            q = s.search()
+            q = self.searcher.search()
             q = q.facet_range('price_unit', start=0, end=100, gap=30,
                               _local_params={'ex': 'price', 'key': 'price'},
                               _coerce=float_to_python
@@ -474,9 +471,8 @@ class QueryTest(TestCase):
             self.assertEqual(date_facet.values[7].count, 0)
 
     def test_facet_query(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 19083,
@@ -495,7 +491,7 @@ class QueryTest(TestCase):
 }
 '''
 
-            q = s.search()
+            q = self.searcher.search()
             q = q.filter(date_modified__gte='NOW-1MONTH', _local_params={'tag': 'dt'})
             q = q.facet_query(X(date_modified__gte='NOW/DAY'))
             q = q.facet_query(X(date_modified__gte='NOW-7DAYS'), _local_params={'key': 'dt_week'})
@@ -529,9 +525,8 @@ class QueryTest(TestCase):
             self.assertEqual(year_ex_facet.count, 19083)
 
     def test_facet_pivot(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 88318,
@@ -673,7 +668,7 @@ class QueryTest(TestCase):
 }
 '''
 
-            q = s.search()
+            q = self.searcher.search()
             q = q.facet_pivot('type', ('category', _obj_mapper, dict(limit=3)), 'visible',
                               _local_params=LocalParams(ex='type,category', key='tcv'),
                               mincount=2)
@@ -713,9 +708,8 @@ class QueryTest(TestCase):
             self.assertRaises(IndexError, lambda: facet.values[3])
 
     def test_group_query(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "grouped": {
     "price:[1000 TO 2000]": {
@@ -759,7 +753,7 @@ class QueryTest(TestCase):
 }
 '''
             q = (
-                s.search()
+                self.searcher.search()
                 .group(limit=2)
                 .group_query(price__range=[1000, 2000])
                 .group_query(status=666)
@@ -796,9 +790,8 @@ class QueryTest(TestCase):
             self.assertEqual(other_grouped.docs[0].name, 'Test 2')
 
     def test_group_func(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "grouped": {
     "termfreq(name,'test')": {
@@ -931,7 +924,7 @@ class QueryTest(TestCase):
 }
 '''
             q = (
-                s.search()
+                self.searcher.search()
                 .group(limit=2)
                 .group_func(func.termfreq('name', "'test'"))
                 .group_func(func.sum(func.product('company', 1000), 'status'))
@@ -995,9 +988,9 @@ class QueryTest(TestCase):
                 return dict((id, Obj(int(id), '{} {}'.format(id, id)))
                             for id in ids)
 
-        s = TestSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''{
+        searcher = TestSearcher('http://example.com:8180/solr')
+        with self.patch_send_request(searcher) as send_request:
+            send_request.return_value = '''{
   "grouped":{
     "company":{
       "matches":281,
@@ -1054,7 +1047,7 @@ class QueryTest(TestCase):
         "mean":3.0154924967763808E7,
         "stddev":1.1411980204045008E10}}}}'''
 
-            q = s.search()
+            q = searcher.search()
             q = q.facet_field('category', mincount=5, limit=10,
                               _local_params={'ex': 'category'},
                               _instance_mapper=_obj_mapper)
@@ -1135,9 +1128,8 @@ class QueryTest(TestCase):
             self.assertEqual(price_stats.missing, 556686)
 
     def test_search_grouped_simple(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''{
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''{
   "grouped": {
     "company": {
         "matches": 3657093,
@@ -1163,7 +1155,7 @@ class QueryTest(TestCase):
               "name":"Test 5",
               "company":"3"}]}}}}'''
 
-            q = s.search()
+            q = self.searcher.search()
             q = q.group('company', limit=3, format='simple')
             raw_query = str(q)
 
@@ -1185,9 +1177,8 @@ class QueryTest(TestCase):
             self.assertEqual(grouped.docs[3].name, 'Test 5')
 
     def test_stats(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 56,
@@ -1261,7 +1252,7 @@ class QueryTest(TestCase):
 }'''
 
             q = (
-                s.search()
+                self.searcher.search()
                 .stats('price', facet_fields=['visible', ('category', _obj_mapper)]))
 
             raw_query = str(q)
@@ -1318,9 +1309,8 @@ class QueryTest(TestCase):
             self.assertEqual(category_facet.get_value('66').instance.name, '66 66')
 
         # empty stats
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 0,
@@ -1334,7 +1324,7 @@ class QueryTest(TestCase):
   }
 }'''
 
-            q = s.search().stats('price')
+            q = self.searcher.search().stats('price')
 
             raw_query = str(q)
 
@@ -1353,9 +1343,8 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(s.stddev, None)
             
         # empty stats facet
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "response": {
     "numFound": 0,
@@ -1379,7 +1368,7 @@ class QueryTest(TestCase):
   }
 }'''
 
-            q = s.search().stats('price', facet_fields=['model'])
+            q = self.searcher.search().stats('price', facet_fields=['model'])
 
             raw_query = str(q)
 
@@ -1403,8 +1392,7 @@ class QueryTest(TestCase):
             self.assertEqual(len(model_facet.values), 0)
 
     def test_results_exc(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        q = s.search().stats('price')
+        q = self.searcher.search().stats('price')
         with patch.object(q, '_fetch_results') as _fetch_results:
             _fetch_results.side_effect = AttributeError('no such attribute')
 

@@ -1,17 +1,16 @@
 from __future__ import unicode_literals
 
-from unittest import TestCase
-
 from mock import patch
 
 from solar import SolrSearcher
 from solar.contrib.flask.pagination import Pagination, SolrQueryWrapper
 
+from .base import TestCase
+
 
 class FlaskPaginationTest(TestCase):
     def test_pagination(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request') as send_request:
+        with self.patch_send_request() as send_request:
             send_request.return_value = '''
 {
   "response":{
@@ -28,7 +27,7 @@ class FlaskPaginationTest(TestCase):
   }
 }
 '''
-            p = Pagination(s.search(), page=2, per_page=2)
+            p = Pagination(self.searcher.search(), page=2, per_page=2)
 
             self.assertEqual(p.total, 28)
             self.assertEqual(p.pages, 14)
@@ -44,7 +43,7 @@ class FlaskPaginationTest(TestCase):
 
             self.assertEqual(send_request.call_count, 1)
 
-        with patch.object(s.solrs_read[0], '_send_request') as send_request:
+        with self.patch_send_request() as send_request:
             send_request.return_value = '''
 {
   "response":{
@@ -54,7 +53,7 @@ class FlaskPaginationTest(TestCase):
   }
 }
 '''
-            p = Pagination(s.search(), page=2)
+            p = Pagination(self.searcher.search(), page=2)
 
             self.assertEqual(p.total, 18)
             self.assertEqual(p.pages, 1)
@@ -71,8 +70,7 @@ class FlaskPaginationTest(TestCase):
             self.assertEqual(send_request.call_count, 2)
 
     def test_grouped_pagination(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request') as send_request:
+        with self.patch_send_request() as send_request:
             send_request.return_value = '''
 {
   "grouped":{
@@ -109,7 +107,7 @@ class FlaskPaginationTest(TestCase):
   }
 }
 '''
-            q = s.search().group('company', limit=3)
+            q = self.searcher.search().group('company', limit=3)
             p = Pagination(SolrQueryWrapper(q, 'company'), page=29, per_page=2)
 
             self.assertEqual(p.total, 109)

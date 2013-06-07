@@ -24,9 +24,6 @@ class SolrSearcherMeta(type):
 
 class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     solr_url = None
-    solr_read_urls = None
-    solr_write_urls = None
-
     unique_field = 'id'
 
     model = None
@@ -41,20 +38,12 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     def __init__(self, solr_url=None, model=None, session=None, db_field=None,
                  query_cls=None, group_cls=None, document_cls=None):
         self.solr_url = solr_url or self.solr_url
-        self.solr_read_urls = self.solr_read_urls or []
-        self.solr_write_urls = self.solr_write_urls or []
-        if self.solr_url:
-            self.solr_read_urls.append(self.solr_url)
-            self.solr_write_urls.append(self.solr_url)
-        self.solr_read_urls = list(set(self.solr_read_urls))
-        self.solr_write_urls = list(set(self.solr_write_urls))
-
-        self.solrs_read = [Solr(url) for url in self.solr_read_urls]
-        self.solrs_write = [Solr(url) for url in self.solr_write_urls]
+        self.solr = Solr(self.solr_url)
 
         self.model = model or self.model
         self.session = session or self.session
         self.db_field = db_field or self.db_field
+
         self.query_cls = query_cls or self.query_cls
         self.group_cls = group_cls or self.group_cls
         self.document_cls = document_cls or self.document_cls
@@ -69,49 +58,27 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     def get(self, id=None, ids=None, **kwargs):
         if ids and hasattr(ids, '__iter__'):
             ids = ','.join(ids)
-        solr = random.choice(self.solrs_write)
-        raw_results = solr.get(id=id, ids=ids, **kwargs)
+        raw_results = self.solr.get(id=id, ids=ids, **kwargs)
         return [self.document_cls(**raw_doc) for raw_doc in raw_results.docs]
 
     # proxy methods
 
     def select(self, q, **kwargs):
-        solr = random.choice(self.solrs_read)
-        return solr.search(q, **kwargs)
+        return self.solr.search(q, **kwargs)
 
     def add(self, docs, commit=True):
-        for solr in self.solrs_write:
-            self._add(solr, docs, commit=commit)
+        cleaned_docs = [{k: v for k, v in doc.items() if v is not None}]
+        return self.solr.add(cleaned_docs, commit=commit)
 
     def commit(self):
-        for solr in self.solrs_write:
-            self._commit(solr)
+        self.solr.commit()
 
     def delete(self, *args, **kwargs):
-        for solr in self.solrs_write:
-            self._delete(solr, *args, **kwargs)
+        commit = kwargs.pop('commit', True)
+        self.solr.delete(q=make_q(None, None, *args, **kwargs), commit=commit)
 
     def optimize_index(self):
-        for solr in self.solrs_write:
-            self._optimize_index(solr)
-
-    # private methods
-
-    def _add(self, solr, docs, commit=True):
-        cleaned_docs = []
-        for doc in docs:
-            cleaned_docs.append(dict([(k, v) for k, v in doc.items() if v is not None]))
-        solr.add(cleaned_docs, commit)
-
-    def _commit(self, solr):
-        solr.commit()
-
-    def _delete(self, solr, *args, **kwargs):
-        commit = kwargs.pop('commit', True)
-        solr.delete(q=make_q(None, None, *args, **kwargs), commit=commit)
-
-    def _optimize_index(self, solr):
-        solr.optimize()
+        self.solr.optimize()
 
     # methods to override
 

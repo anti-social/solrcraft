@@ -1,10 +1,7 @@
 from __future__ import unicode_literals
 
 from datetime import datetime
-from unittest import TestCase
 from collections import namedtuple
-
-from mock import patch
 
 from solar import X, LocalParams
 from solar.searcher import SolrSearcher
@@ -14,6 +11,8 @@ from solar.queryfilter import (
     PivotFilter, FacetPivotFilter,
     FacetQueryFilter, FacetQueryFilterValue, RangeFilter,
     OrderingFilter, OrderingValue)
+
+from .base import TestCase
 
 
 Obj = namedtuple('Obj', ['id', 'name'])
@@ -35,9 +34,8 @@ class CategoryFilter(FacetFilter):
 
 class QueryTest(TestCase):
     def test_pivot_filter(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
 {
   "grouped": {
     "company": {
@@ -113,7 +111,7 @@ class QueryTest(TestCase):
   }
 }'''
         
-            q = s.search()
+            q = self.searcher.search()
 
             qf = QueryFilter()
             qf.add_filter(
@@ -186,9 +184,8 @@ class QueryTest(TestCase):
             self.assertEqual(manu_filter.all_values[2].selected, False)
     
     def test_queryfilter(self):
-        s = SolrSearcher('http://example.com:8180/solr')
-        with patch.object(s.solrs_read[0], '_send_request'):
-            s.solrs_read[0]._send_request.return_value = '''{
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''{
   "grouped":{
     "company":{
       "matches":0,
@@ -211,7 +208,7 @@ class QueryTest(TestCase):
     "facet_dates":{},
     "facet_ranges":{}}}'''
         
-            q = s.search()
+            q = self.searcher.search()
 
             qf = QueryFilter()
             qf.add_filter(
@@ -283,8 +280,8 @@ class QueryTest(TestCase):
             self.assertIn('sort=price desc', raw_query)
 
             results = q.results
-            with patch.object(s.solrs_read[0], '_send_request'):
-                s.solrs_read[0]._send_request.return_value = '''{
+            with self.patch_send_request() as send_request:
+                send_request.return_value = '''{
   "response":{"numFound":800,"start":0,"docs":[]
   },
   "stats":{
