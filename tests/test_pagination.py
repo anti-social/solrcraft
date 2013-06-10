@@ -3,7 +3,8 @@ from __future__ import unicode_literals
 from mock import patch
 
 from solar import SolrSearcher
-from solar.contrib.flask.pagination import Pagination, SolrQueryWrapper
+from solar.ext.pagination import SolrQueryWrapper
+from solar.ext.pagination.flask import Pagination
 
 from .base import TestCase
 
