@@ -67,8 +67,7 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
         return self.solr.search(q, **kwargs)
 
     def add(self, docs, commit=True):
-        cleaned_docs = [{k: v for k, v in doc.items() if v is not None}]
-        return self.solr.add(cleaned_docs, commit=commit)
+        return self.solr.add(docs, commit=commit)
 
     def commit(self):
         self.solr.commit()
