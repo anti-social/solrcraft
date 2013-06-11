@@ -353,7 +353,9 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
                 fqs.append(x)
         local_params = LocalParams()
         local_params['tag'] = self.name
-        return query.filter(X(*fqs, _op='OR'), _local_params=local_params)
+        if fqs:
+            query = query.filter(X(*fqs, _op='OR'), _local_params=local_params)
+        return query
 
     def process_results(self, results, params):
         selected_values = [v.split(DEFAULT_VAL_SEP) for v in params.get(self.name, [])]
