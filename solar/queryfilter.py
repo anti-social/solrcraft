@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 from copy import deepcopy
 
 from .util import X, LocalParams, make_fq, process_value
+from .compat import force_unicode
 
 
 DEFAULT_OP_SEP = '__'
@@ -327,7 +328,6 @@ class FacetPivotFilter(FacetFilter):
 
 class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
     def __init__(self, name, *pivots, **kwargs):
-        import string
         super(PivotFilter, self).__init__(name)
         self._pivots = pivots
         self._pivot_fields = [p.field for p in pivots]
@@ -344,11 +344,12 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
             *zip(self._pivot_fields, self._instance_mappers, self._pivot_params),
             _local_params=local_params)
         fqs = []
-        for op, values_str in self._filter_and_split_params(params):
+        for op, value in self._filter_and_split_params(params):
+            value = force_unicode(value)
             op_func = OPERATORS.get(op)
             if op_func:
                 x = X()
-                for field, v in zip(self._pivot_fields, values_str.split(DEFAULT_VAL_SEP)):
+                for field, v in zip(self._pivot_fields, value.split(DEFAULT_VAL_SEP)):
                     x = x & op_func(field, v)
                 fqs.append(x)
         local_params = LocalParams()
@@ -358,7 +359,8 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         return query
 
     def process_results(self, results, params):
-        selected_values = [v.split(DEFAULT_VAL_SEP) for v in params.get(self.name, [])]
+        selected_values = [force_unicode(v).split(DEFAULT_VAL_SEP)
+                           for v in params.get(self.name, [])]
         self.pivot.process_facet(
             results.get_facet_pivot(self.name),
             self._pivots[1:],

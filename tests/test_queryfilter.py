@@ -122,7 +122,7 @@ class QueryTest(TestCase):
                     FacetPivotFilter('discount', coerce=bool_to_python)))
 
             params = {
-                'manu': ['samsung:note', 'nokia:n900:false', 'nothing:']
+                'manu': ['samsung:note', 'nokia:n900:false', 'nothing:', 10]
             }
 
             q = qf.apply(q, params)
@@ -134,7 +134,8 @@ class QueryTest(TestCase):
             self.assertIn('f.model.facet.limit=5', raw_query)
             self.assertIn('fq={!tag=manu}((manufacturer:"samsung" AND model:"note") '
                           'OR (manufacturer:"nokia" AND model:"n900" AND discount:"false") '
-                          'OR (manufacturer:"nothing" AND model:""))',
+                          'OR (manufacturer:"nothing" AND model:"") '
+                          'OR manufacturer:"10")',
                           raw_query)
 
             qf.process_results(q.results)
