@@ -254,11 +254,11 @@ class QueryTest(TestCase):
             params = {
                 'cat': ['5', '13'],
                 'country': ['us', 'ru'],
-                'date_created': ['today'],
-                'price__gte': ['100'],
+                'date_created': 'today',
+                'price__gte': '100',
                 'price__lte': ['200', 'nan'],
-                'dist': ['d10'],
-                'sort': ['-price'],
+                'dist': 'd10',
+                'sort': '-price',
                 }
 
             q = qf.apply(q, params)

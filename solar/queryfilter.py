@@ -111,6 +111,8 @@ class BaseFilter(object):
             else:
                 op = DEFAULT_OP_SEP.join(ops[1:])
             if name == self.name:
+                if not isinstance(v, (list, tuple)):
+                    v = [v]
                 for w in v:
                     try:
                         w = self.coerce(w)
@@ -493,7 +495,7 @@ class OrderingValue(object):
     DESC = 'desc'
     
     def __init__(self, value, fields, title=None, **kwargs):
-        self.value = value.strip()
+        self.value = value
         if self.value.startswith('-'):
             self.direction = self.DESC
         else:
@@ -540,9 +542,12 @@ class OrderingFilter(BaseFilter):
         
     def apply(self, query, params):
         ordering_value = None
-        orderlist = params.get(self.name)
-        if orderlist:
-            ordering_value = self.get_value(orderlist[0].strip())
+        valuelist = params.get(self.name, [])
+        if not isinstance(valuelist, (list, tuple)):
+            valuelist = [valuelist]
+
+        if valuelist:
+            ordering_value = self.get_value(valuelist[0])
 
         if not ordering_value:
             ordering_value = self.default_value
