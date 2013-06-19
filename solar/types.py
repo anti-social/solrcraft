@@ -4,6 +4,7 @@ import inspect
 import datetime
 
 from .pysolr import DATETIME_REGEX
+from .compat import force_unicode
 
 
 def instantiate(typeobj, *args, **kwargs):
@@ -27,6 +28,11 @@ class Type(object):
 
     def process_param_value(self, value):
         return self.to_python(value)
+
+
+class String(Type):
+    def to_python(self, value):
+        return force_unicode(value)
 
 
 class Integer(Type):
