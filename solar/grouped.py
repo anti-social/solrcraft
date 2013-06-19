@@ -78,6 +78,14 @@ class GroupedField(Grouped):
         super(GroupedField, self).__init__(
             self.field, group_cls, document_cls, **kwargs)
 
+    def get_params(self):
+        params = super(GroupedField, self).get_params()
+        # Solr does not support params for specific group field
+        # but may be it will do that in future
+        for p, v in self.grouped_params.items():
+            params['f.{}.group.{}'.format(self.key, p)] = v
+        return params
+
     def instance_mapper(self, ids):
         if self._instance_mapper:
             return self._instance_mapper(ids)
