@@ -22,7 +22,7 @@ class FacetField(object):
     def __init__(self, field, local_params=None, instance_mapper=None,
                  type=None, **facet_params):
         self.field = field
-        self.local_params = local_params or LocalParams()
+        self.local_params = LocalParams(local_params)
         self.key = self.local_params.get('key', self.field)
         self.type = instantiate(type)
         self.to_python = get_to_python(self.type)
@@ -90,7 +90,7 @@ class FacetRange(object):
         self.orig_start = self.start = start
         self.orig_end = self.end = end
         self.orig_gap = self.gap = gap
-        self.local_params = local_params or LocalParams()
+        self.local_params = LocalParams(local_params)
         self.key = self.local_params.get('key', self.field)
         self.type = instantiate(type)
         self.to_python = get_to_python(self.type)
@@ -157,7 +157,7 @@ class FacetQuery(object):
 
 
 class FacetPivot(object):
-    def __init__(self, *fields, **kwargs):
+    def __init__(self, *fields, local_params=None):
         self.fields = []
         self.instance_mappers = {}
         self.facet_params = {}
@@ -178,17 +178,14 @@ class FacetPivot(object):
                 self.facet_params[field] = facet_params
         self.field = self.fields[0]
         self.name = ','.join(self.fields)
-        self.local_params = kwargs.pop('local_params', None) or LocalParams()
+        self.local_params = LocalParams(local_params)
         self.key = self.local_params.get('key', self.name)
-        self.facet_pivot_params = kwargs
         self.values = []
 
     def get_params(self):
         params = {}
         params['facet'] = True
         params['facet.pivot'] = [make_fq(X(self.name), self.local_params)]
-        for p, v in self.facet_pivot_params.items():
-            params['facet.pivot.{}'.format(p)] = v
         for field, facet_params in self.facet_params.items():
             for p, v in facet_params.items():
                 params['f.{}.facet.{}'.format(field, p)] = v

@@ -32,6 +32,12 @@ def _with_clone(fn):
     return wrapper
 
 
+def _pop_local_params_from_kwargs(kwargs):
+    if '_local_params' in kwargs:
+        return LocalParams(kwargs.pop('_local_params'))
+    return LocalParams(kwargs.pop('local_params', None))
+
+
 class SolrParameterSetter(object):
     def __init__(self, solr_query, param_name):
         self.solr_query = solr_query
@@ -257,12 +263,12 @@ class SolrQuery(object):
 
     @_with_clone
     def filter(self, *args, **kwargs):
-        local_params = LocalParams(kwargs.pop('_local_params', None))
+        local_params = _pop_local_params_from_kwargs(kwargs)
         self._fq.append((X(*args, **kwargs), local_params))
 
     @_with_clone
     def exclude(self, *args, **kwargs):
-        local_params = LocalParams(kwargs.pop('_local_params', None))
+        local_params = _pop_local_params_from_kwargs(kwargs)
         self._fq.append((~X(*args, **kwargs), local_params))
 
     @_with_clone
@@ -366,35 +372,43 @@ class SolrQuery(object):
             return self
 
     @_with_clone
-    def facet_field(self, field, _local_params=None, _instance_mapper=None,
-                    _type=None, **kwargs):
-        local_params = LocalParams(_local_params)
+    def facet_field(self, field,
+                    local_params=None, instance_mapper=None, type=None,
+                    limit=None, offset=None, mincount=None, sort=None,
+                    prefix=None, missing=None, method=None, **kwargs):
+        # for compatibility
+        local_params = kwargs.pop('_local_params', local_params)
+        instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
+        type = kwargs.pop('_type', type)
         self._facet_fields.append(
             FacetField(field, local_params=local_params,
-                       instance_mapper=_instance_mapper, type=_type,
+                       instance_mapper=instance_mapper, type=type,
+                       limit=limit, offset=offset, mincount=mincount,
+                       sort=sort, prefix=prefix, missing=missing, method=method,
                        **kwargs))
 
     @_with_clone
     def facet_range(self, field, start, end, gap,
                     hardend=None, other=None, include=None,
-                    _local_params=None, _type=None, **kwargs):
-        local_params = LocalParams(_local_params)
+                    local_params=None, type=None, **kwargs):
+        local_params = kwargs.pop('_local_params', local_params)
+        type = kwargs.pop('_type', type)
         self._facet_ranges.append(
             FacetRange(field, start, end, gap,
                        hardend=hardend, other=other, include=include,
-                       local_params=local_params, type=_type, **kwargs))
+                       local_params=local_params, type=type, **kwargs))
 
     @_with_clone
     def facet_query(self, *args, **kwargs):
-        local_params = LocalParams(kwargs.pop('_local_params', None))
+        local_params = _pop_local_params_from_kwargs(kwargs)
         self._facet_queries.append(
             FacetQuery(X(*args, **kwargs), local_params=local_params))
         
     @_with_clone
     def facet_pivot(self, *fields, **kwargs):
-        local_params = LocalParams(kwargs.pop('_local_params', None))
+        local_params = _pop_local_params_from_kwargs(kwargs)
         self._facet_pivots.append(
-            FacetPivot(*fields, local_params=local_params, **kwargs))
+            FacetPivot(*fields, local_params=local_params))
 
     @_with_clone
     def group(self, *fields, **group_params):
@@ -436,11 +450,13 @@ class SolrQuery(object):
             return self
 
     @_with_clone
-    def group_field(self, field, _instance_mapper=None, _type=None):
+    def group_field(self, field, instance_mapper=None, type=None, **kwargs):
+        instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
+        type = kwargs.pop('_type', type)
         self._groupeds.append(
             GroupedField(
                 field, self.searcher.group_cls, self.searcher.document_cls,
-                instance_mapper=_instance_mapper, type=_type))
+                instance_mapper=instance_mapper, type=type))
 
     @_with_clone
     def group_query(self, *args, **kwargs):

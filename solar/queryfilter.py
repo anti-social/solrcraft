@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from .util import X, LocalParams, make_fq, process_value
 from .types import instantiate, get_to_python, Boolean
+from .query import _pop_local_params_from_kwargs
 from .compat import force_unicode
 
 
@@ -133,11 +134,12 @@ class BaseFilter(object):
 class Filter(BaseFilter):
     fq_connector = X.OR
 
-    def __init__(self, name, field=None, type=None, _local_params=None,
+    def __init__(self, name, field=None, type=None, local_params=None,
                  select_multiple=True, default=None, **kwargs):
         super(Filter, self).__init__(name, type=type)
         self.field = field or self.name
-        self.local_params = LocalParams(_local_params)
+        self.local_params = LocalParams(
+            kwargs.pop('_local_params', local_params))
         self.select_multiple = select_multiple
         self.default = default
     
@@ -149,8 +151,8 @@ class Filter(BaseFilter):
                 xs = [x for x, lp in fqs if x]
                 if xs:
                     return query.filter(*xs,
-                                         _op=self.fq_connector,
-                                         _local_params=local_params)
+                                        _local_params=local_params,
+                                        _op=self.fq_connector)
             else:
                 x, lp = fqs[-1]
                 local_params = LocalParams(lp)
@@ -219,13 +221,14 @@ class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
     
     def __init__(self, name, field=None, filter_value_cls=None, type=None,
-                 _local_params=None, _instance_mapper=None,
+                 local_params=None, instance_mapper=None,
                  select_multiple=True, **kwargs):
         super(FacetFilter, self).__init__(name, field, type=type,
                                           select_multiple=select_multiple)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
-        self.local_params = LocalParams(_local_params)
-        self._instance_mapper = _instance_mapper
+        self.local_params = LocalParams(
+            kwargs.pop('_local_params', local_params))
+        self._instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
         self.kwargs = kwargs
         self.values = []
         self.selected_values = []
@@ -342,7 +345,7 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         self._pivot_fields = [p.field for p in pivots]
         self._instance_mappers = [p._instance_mapper for p in pivots]
         self._pivot_params = [p.kwargs for p in pivots]
-        self.local_params = LocalParams(kwargs.pop('_local_params', None))
+        self.local_params = LocalParams(_pop_local_params_from_kwargs(kwargs))
         self.pivot = self._pivots[0].bind(self)
 
     def apply(self, query, params):
@@ -378,10 +381,11 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
 
                 
 class FacetQueryFilterValue(object):
-    def __init__(self, name, fq, _local_params=None, title=None, **kwargs):
+    def __init__(self, name, fq, local_params=None, title=None, **kwargs):
         self.filter_name = None
         self.value = name
-        self.local_params = LocalParams(_local_params)
+        self.local_params = LocalParams(
+            kwargs.pop('_local_params', local_params))
         self.fq = fq
         self.title = title
         self.opts = kwargs

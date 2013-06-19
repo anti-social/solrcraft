@@ -670,14 +670,12 @@ class QueryTest(TestCase):
 
             q = self.searcher.search()
             q = q.facet_pivot('type', ('category', _obj_mapper, dict(limit=3)), 'visible',
-                              _local_params=LocalParams(ex='type,category', key='tcv'),
-                              mincount=2)
+                              _local_params=LocalParams(ex='type,category', key='tcv'))
 
             raw_query = str(q)
 
             self.assertIn('facet=true', raw_query)
             self.assertIn('facet.pivot={!ex=type,category key=tcv}type,category,visible', raw_query)
-            self.assertIn('facet.pivot.mincount=2', raw_query)
             self.assertIn('f.category.facet.limit=3', raw_query)
 
             r = q.results
