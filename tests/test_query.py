@@ -7,7 +7,7 @@ from mock import patch
 
 from solar.searcher import SolrSearcher
 from solar.util import SafeUnicode, X, LocalParams, make_fq
-from solar.converters import int_to_python, float_to_python, datetime_to_python
+from solar.types import Integer, Float, DateTime
 from solar import func
 
 from .base import TestCase
@@ -313,7 +313,7 @@ class QueryTest(TestCase):
             q = q.filter(category=3540208, _local_params={'tag': 'cat'})
             q = q.facet(limit=5)
             q = q.facet_field('category', _instance_mapper=_obj_mapper,
-                              _local_params={'key': 'cat'}, _coerce=int_to_python)
+                              _local_params={'key': 'cat'}, _type=Integer)
             q = q.facet_field('category', _instance_mapper=_obj_mapper,
                               _local_params={'ex': 'cat', 'key': 'cat_ex'})
 
@@ -401,11 +401,11 @@ class QueryTest(TestCase):
             q = self.searcher.search()
             q = q.facet_range('price_unit', start=0, end=100, gap=30,
                               _local_params={'ex': 'price', 'key': 'price'},
-                              _coerce=float_to_python
+                              _type=Float,
             )
             q = q.facet_range('date_modified',
                               start='NOW/DAY-7DAYS', end='NOW/DAY+1DAY', gap='+1DAY',
-                              _coerce=datetime_to_python
+                              _type=DateTime,
             )
 
             raw_query = str(q)
@@ -1055,7 +1055,7 @@ class QueryTest(TestCase):
             q = q.facet_query(price__lte=100,
                               _local_params=[('ex', 'price'), ('cache', False)])
             q = q.group(limit=3)
-            q = q.group_field('company', _instance_mapper=_obj_mapper)
+            q = q.group_field('company', _instance_mapper=_obj_mapper, _type=Integer)
             q = q.filter(category=13, _local_params={'tag': 'category'})
             q = q.stats('price')
             q = q.order_by('-date_created')
@@ -1084,7 +1084,7 @@ class QueryTest(TestCase):
             self.assertEqual(grouped.ngroups, 109)
             self.assertEqual(grouped.matches, 281)
             self.assertEqual(grouped.groups[0].ndocs, 9)
-            self.assertEqual(grouped.groups[0].value, '1')
+            self.assertEqual(grouped.groups[0].value, 1)
             self.assertEqual(grouped.groups[0].instance.name, '1 1')
             self.assertEqual(grouped.groups[0].docs[0].id, '111')
             self.assertEqual(grouped.groups[0].docs[0].name, 'Test 1')
@@ -1095,7 +1095,7 @@ class QueryTest(TestCase):
             self.assertEqual(grouped.groups[0].docs[-1].instance.id, 333)
             self.assertEqual(grouped.groups[0].docs[-1].instance.name, '333 333')
             self.assertEqual(grouped.groups[1].ndocs, 1)
-            self.assertEqual(grouped.groups[1].value, '3')
+            self.assertEqual(grouped.groups[1].value, 3)
             self.assertEqual(grouped.groups[1].instance.name, '3 3')
             self.assertEqual(grouped.groups[1].docs[0].id, '555')
             self.assertEqual(grouped.groups[1].docs[0].name, 'Test 5')

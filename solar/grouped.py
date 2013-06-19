@@ -3,13 +3,16 @@ from __future__ import unicode_literals
 from copy import deepcopy
 
 from .util import X, make_fq
+from .types import instantiate, get_to_python
 
 
 class Grouped(object):
-    def __init__(self, key, group_cls, document_cls, **kwargs):
+    def __init__(self, key, group_cls, document_cls, type=None, **kwargs):
         self.key = key
         self.group_cls = group_cls
         self.document_cls = document_cls
+        self.type = instantiate(type)
+        self.to_python = get_to_python(self.type)
         self.grouped_params = kwargs
         if self.grouped_params.get('ngroups') is None:
             self.grouped_params['ngroups'] = True
@@ -39,7 +42,7 @@ class Grouped(object):
             for group_data in groups:
                 doclist_data = group_data.get('doclist', {})
                 group = self.group_cls(
-                    group_data['groupValue'],
+                    self.to_python(group_data['groupValue']),
                     doclist_data.get('numFound'),
                     doclist_data.get('start'))
                 for raw_doc in doclist_data.get('docs', []):
@@ -72,11 +75,12 @@ class Grouped(object):
 class GroupedField(Grouped):
     param_name = 'field'
 
-    def __init__(self, field, group_cls, document_cls, instance_mapper=None, **kwargs):
+    def __init__(self, field, group_cls, document_cls,
+                 instance_mapper=None, type=None, **kwargs):
         self.field = field
         self._instance_mapper = instance_mapper
         super(GroupedField, self).__init__(
-            self.field, group_cls, document_cls, **kwargs)
+            self.field, group_cls, document_cls, type=type, **kwargs)
 
     def get_params(self):
         params = super(GroupedField, self).get_params()

@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 from copy import deepcopy
 
 from .util import X, LocalParams, make_fq, process_value
+from .types import instantiate, get_to_python, Boolean
 from .compat import force_unicode
 
 
@@ -96,9 +97,14 @@ class QueryFilter(object):
 
 class BaseFilter(object):
 
-    def __init__(self, name, coerce=None):
+    def __init__(self, name, type=None):
         self.name = name
-        self.coerce = coerce or (lambda v: v)
+        self.type = instantiate(type)
+        self.to_python = (
+            self.type.process_param_value
+            if hasattr(self.type, 'process_param_value') else
+            (lambda v: v)
+        )
 
     def _filter_and_split_params(self, params):
         """Returns [(operator1, value1), (operator2, value2)]"""
@@ -115,7 +121,7 @@ class BaseFilter(object):
                     v = [v]
                 for w in v:
                     try:
-                        w = self.coerce(w)
+                        w = self.to_python(w)
                     except ValueError:
                         continue
                     yield op, w
@@ -127,9 +133,9 @@ class BaseFilter(object):
 class Filter(BaseFilter):
     fq_connector = X.OR
 
-    def __init__(self, name, field=None, coerce=None, _local_params=None,
+    def __init__(self, name, field=None, type=None, _local_params=None,
                  select_multiple=True, default=None, **kwargs):
-        super(Filter, self).__init__(name, coerce=coerce)
+        super(Filter, self).__init__(name, type=type)
         self.field = field or self.name
         self.local_params = LocalParams(_local_params)
         self.select_multiple = select_multiple
@@ -212,10 +218,10 @@ class FacetFilterValue(FacetFilterValueMixin):
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
     
-    def __init__(self, name, field=None, filter_value_cls=None, coerce=None,
+    def __init__(self, name, field=None, filter_value_cls=None, type=None,
                  _local_params=None, _instance_mapper=None,
                  select_multiple=True, **kwargs):
-        super(FacetFilter, self).__init__(name, field, coerce=coerce,
+        super(FacetFilter, self).__init__(name, field, type=type,
                                           select_multiple=select_multiple)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(_local_params)
@@ -249,7 +255,8 @@ class FacetFilter(Filter):
         local_params['ex'] = self.name
         query = query.facet_field(
             self.field, _local_params=local_params,
-            _instance_mapper=self.instance_mapper, **self.kwargs)
+            _instance_mapper=self.instance_mapper, _type=self.type,
+            **self.kwargs)
         return query
 
     def process_results(self, results, params):
@@ -299,19 +306,19 @@ class FacetPivotFilter(FacetFilter):
     filter_value_cls = FacetPivotFilterValue
 
     def __init__(self, name, field=None, filter_value_cls=None,
-                 coerce=None, _pivot_filter=None, **kwargs):
+                 type=None, _pivot_filter=None, **kwargs):
         super(FacetPivotFilter, self).__init__(
             name, field=field, filter_value_cls=filter_value_cls,
-            coerce=coerce, **kwargs)
+            type=type, **kwargs)
         self._pivot_filter = _pivot_filter
 
     def bind(self, pivot_filter):
         return FacetPivotFilter(
             self.name, field=self.field, filter_value_cls=self.filter_value_cls,
-            coerce=self.coerce, _pivot_filter=pivot_filter, **self.kwargs)
+            type=self.type, _pivot_filter=pivot_filter, **self.kwargs)
         
     def process_facet(self, facet, pivot_filters, selected_values, facet_values):
-        cur_selected_values = set(self.coerce(v[0]) for v in selected_values)
+        cur_selected_values = set(self.to_python(v[0]) for v in selected_values)
 
         for fv in facet.values:
             selected = fv.value in cur_selected_values
@@ -450,9 +457,9 @@ class FacetQueryFilter(Filter):
 class RangeFilter(Filter):
     fq_connector = X.AND
     
-    def __init__(self, name, field=None, coerce=int,
+    def __init__(self, name, field=None, type=None,
                  gather_stats=False, exclude_filter=True, **kwargs):
-        super(RangeFilter, self).__init__(name, field, coerce=coerce, **kwargs)
+        super(RangeFilter, self).__init__(name, field, type=type, **kwargs)
         self.gather_stats = gather_stats
         self.exclude_filter = exclude_filter
         self.from_value = None

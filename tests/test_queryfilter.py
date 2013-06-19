@@ -4,8 +4,8 @@ from datetime import datetime
 from collections import namedtuple
 
 from solar import X, LocalParams
+from solar.types import Integer, Boolean
 from solar.searcher import SolrSearcher
-from solar.converters import bool_to_python
 from solar.queryfilter import (
     QueryFilter, Filter, FacetFilter, FacetFilterValue,
     PivotFilter, FacetPivotFilter,
@@ -119,7 +119,7 @@ class QueryTest(TestCase):
                     'manu',
                     FacetPivotFilter('manufacturer', mincount=1),
                     FacetPivotFilter('model', _instance_mapper=_obj_mapper, limit=5),
-                    FacetPivotFilter('discount', coerce=bool_to_python)))
+                    FacetPivotFilter('discount', type=Boolean)))
 
             params = {
                 'manu': ['samsung:note', 'nokia:n900:false', 'nothing:', 10]
@@ -230,7 +230,8 @@ class QueryTest(TestCase):
                         X(date_created__gte='NOW/DAY-7DAY'),
                         title='Week ago')))
             qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True,
-                                      _local_params=LocalParams(cache=False)))
+                                      _local_params=LocalParams(cache=False),
+                                      type=Integer))
             qf.add_filter(
                 FacetQueryFilter(
                     'dist',

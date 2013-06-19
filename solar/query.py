@@ -367,22 +367,22 @@ class SolrQuery(object):
 
     @_with_clone
     def facet_field(self, field, _local_params=None, _instance_mapper=None,
-                    _coerce=None, **kwargs):
+                    _type=None, **kwargs):
         local_params = LocalParams(_local_params)
         self._facet_fields.append(
             FacetField(field, local_params=local_params,
-                       instance_mapper=_instance_mapper, coerce=_coerce,
+                       instance_mapper=_instance_mapper, type=_type,
                        **kwargs))
 
     @_with_clone
     def facet_range(self, field, start, end, gap,
                     hardend=None, other=None, include=None,
-                    _local_params=None, _coerce=None, **kwargs):
+                    _local_params=None, _type=None, **kwargs):
         local_params = LocalParams(_local_params)
         self._facet_ranges.append(
             FacetRange(field, start, end, gap,
                        hardend=hardend, other=other, include=include,
-                       local_params=local_params, coerce=_coerce, **kwargs))
+                       local_params=local_params, type=_type, **kwargs))
 
     @_with_clone
     def facet_query(self, *args, **kwargs):
@@ -436,11 +436,11 @@ class SolrQuery(object):
             return self
 
     @_with_clone
-    def group_field(self, field, _instance_mapper=None):
+    def group_field(self, field, _instance_mapper=None, _type=None):
         self._groupeds.append(
             GroupedField(
                 field, self.searcher.group_cls, self.searcher.document_cls,
-                instance_mapper=_instance_mapper))
+                instance_mapper=_instance_mapper, type=_type))
 
     @_with_clone
     def group_query(self, *args, **kwargs):
