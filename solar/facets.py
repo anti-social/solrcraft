@@ -157,7 +157,7 @@ class FacetQuery(object):
 
 
 class FacetPivot(object):
-    def __init__(self, *fields, local_params=None):
+    def __init__(self, *fields, **kwargs):
         self.fields = []
         self.instance_mappers = {}
         self.types = {}
@@ -177,7 +177,8 @@ class FacetPivot(object):
             self.fields.append(field)
         self.field = self.fields[0]
         self.name = ','.join(self.fields)
-        self.local_params = LocalParams(local_params)
+        self.local_params = LocalParams(
+            _pop_from_kwargs(kwargs, 'local_params'))
         self.key = self.local_params.get('key', self.name)
         self.values = []
 
