@@ -2,9 +2,8 @@ from __future__ import unicode_literals
 
 from copy import deepcopy
 
-from .util import X, LocalParams, make_fq, process_value
+from .util import X, LocalParams, make_fq, process_value, _pop_from_kwargs
 from .types import instantiate, get_to_python, Boolean
-from .query import _pop_local_params_from_kwargs
 from .compat import force_unicode
 
 
@@ -343,9 +342,15 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         super(PivotFilter, self).__init__(name)
         self._pivots = pivots
         self._pivot_fields = [p.field for p in pivots]
-        self._instance_mappers = [p._instance_mapper for p in pivots]
-        self._pivot_params = [p.kwargs for p in pivots]
-        self.local_params = LocalParams(_pop_local_params_from_kwargs(kwargs))
+        self._pivot_kwargs = []
+        for p in self._pivots:
+            kw = p.kwargs.copy()
+            kw.update(
+                _instance_mapper=p._instance_mapper,
+                _type=p.type,
+            )
+            self._pivot_kwargs.append(kw)
+        self.local_params = LocalParams(_pop_from_kwargs(kwargs, 'local_params'))
         self.pivot = self._pivots[0].bind(self)
 
     def apply(self, query, params):
@@ -353,7 +358,7 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         local_params['key'] = self.name
         local_params['ex'] = self.name
         query = query.facet_pivot(
-            *zip(self._pivot_fields, self._instance_mappers, self._pivot_params),
+            *zip(self._pivot_fields, self._pivot_kwargs),
             _local_params=local_params)
         fqs = []
         for op, value in self._filter_and_split_params(params):

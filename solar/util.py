@@ -307,3 +307,8 @@ def split_param(param):
 
 def make_param(param, op):
     return '__'.join((param, op))
+
+def _pop_from_kwargs(kwargs, key):
+    if '_{}'.format(key) in kwargs:
+        return kwargs.pop('_{}'.format(key))
+    return kwargs.pop(key, None)

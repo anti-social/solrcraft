@@ -16,6 +16,7 @@ from .stats import Stats
 from .facets import FacetField, FacetRange, FacetQuery, FacetPivot
 from .grouped import GroupedField, GroupedQuery, GroupedFunc
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
+from .util import _pop_from_kwargs
 
 
 log = logging.getLogger(__name__)
@@ -30,12 +31,6 @@ def _with_clone(fn):
             return res
         return clone
     return wrapper
-
-
-def _pop_local_params_from_kwargs(kwargs):
-    if '_local_params' in kwargs:
-        return LocalParams(kwargs.pop('_local_params'))
-    return LocalParams(kwargs.pop('local_params', None))
 
 
 class SolrParameterSetter(object):
@@ -263,12 +258,12 @@ class SolrQuery(object):
 
     @_with_clone
     def filter(self, *args, **kwargs):
-        local_params = _pop_local_params_from_kwargs(kwargs)
+        local_params = LocalParams(_pop_from_kwargs(kwargs, 'local_params'))
         self._fq.append((X(*args, **kwargs), local_params))
 
     @_with_clone
     def exclude(self, *args, **kwargs):
-        local_params = _pop_local_params_from_kwargs(kwargs)
+        local_params = LocalParams(_pop_from_kwargs(kwargs, 'local_params'))
         self._fq.append((~X(*args, **kwargs), local_params))
 
     @_with_clone
@@ -400,13 +395,13 @@ class SolrQuery(object):
 
     @_with_clone
     def facet_query(self, *args, **kwargs):
-        local_params = _pop_local_params_from_kwargs(kwargs)
+        local_params = _pop_from_kwargs(kwargs, 'local_params')
         self._facet_queries.append(
             FacetQuery(X(*args, **kwargs), local_params=local_params))
         
     @_with_clone
     def facet_pivot(self, *fields, **kwargs):
-        local_params = _pop_local_params_from_kwargs(kwargs)
+        local_params = _pop_from_kwargs(kwargs, 'local_params')
         self._facet_pivots.append(
             FacetPivot(*fields, local_params=local_params))
 

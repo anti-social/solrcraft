@@ -47,9 +47,9 @@ class Float(Type):
 
 class Boolean(Type):
     def to_python(self, value):
-        if value == 'true':
+        if value is True or value == 'true':
             return True
-        elif value == 'false':
+        elif value is False or value == 'false':
             return False
         raise ValueError("Cannot convert {!r} to boolean".format(value))
 

@@ -669,8 +669,11 @@ class QueryTest(TestCase):
 '''
 
             q = self.searcher.search()
-            q = q.facet_pivot('type', ('category', _obj_mapper, dict(limit=3)), 'visible',
-                              _local_params=LocalParams(ex='type,category', key='tcv'))
+            q = q.facet_pivot(
+                'type',
+                ('category', dict(instance_mapper=_obj_mapper, limit=3)),
+                'visible',
+                _local_params=LocalParams(ex='type,category', key='tcv'))
 
             raw_query = str(q)
 

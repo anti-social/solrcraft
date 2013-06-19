@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 
 from copy import deepcopy
 
-from .util import LocalParams, X, make_fq
+from .util import LocalParams, X, make_fq, _pop_from_kwargs
 from .types import instantiate, get_to_python
 from .pysolr import Solr
 
@@ -140,7 +140,7 @@ class FacetRangeValue(object):
 class FacetQuery(object):
     def __init__(self, fq, local_params=None):
         self.fq = fq
-        self.local_params = local_params or LocalParams()
+        self.local_params = LocalParams(local_params)
         self.key = self.local_params.get('key',
                                          make_fq(self.fq, self.local_params))
         self.count = None
@@ -160,22 +160,21 @@ class FacetPivot(object):
     def __init__(self, *fields, local_params=None):
         self.fields = []
         self.instance_mappers = {}
+        self.types = {}
+        self.to_pythons = {}
         self.facet_params = {}
         for field in fields:
-            instance_mapper = None
-            facet_params = None
+            kw = {}
             if isinstance(field, (list, tuple)):
                 if len(field) == 1:
                     field = field[0]
                 elif len(field) == 2:
-                    field, instance_mapper = field
-                elif len(field) == 3:
-                    field, instance_mapper, facet_params = field
+                    field, kw = field
+            self.instance_mappers[field] = _pop_from_kwargs(kw, 'instance_mapper')
+            self.types[field] = _pop_from_kwargs(kw, 'type')
+            self.to_pythons[field] = get_to_python(self.types[field])
+            self.facet_params[field] = kw
             self.fields.append(field)
-            if instance_mapper:
-                self.instance_mappers[field] = instance_mapper
-            if facet_params:
-                self.facet_params[field] = facet_params
         self.field = self.fields[0]
         self.name = ','.join(self.fields)
         self.local_params = LocalParams(local_params)
@@ -204,8 +203,9 @@ class FacetPivot(object):
     def process_pivot(self, raw_pivot, root_pivot):
         self.root_pivot = root_pivot
         for facet_data in raw_pivot:
+            to_python = root_pivot.to_pythons[self.fields[0]]
             fv = FacetValue(
-                facet_data['value'], facet_data['count'], facet=self)
+                to_python(facet_data['value']), facet_data['count'], facet=self)
             if 'pivot' in facet_data:
                 fv.pivot = FacetPivot(*self.fields[1:])
                 fv.pivot.process_pivot(facet_data['pivot'], root_pivot)
