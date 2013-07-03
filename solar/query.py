@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 import re
 import sys
 import logging
-import warnings
 from copy import copy, deepcopy
 from itertools import chain, starmap
 from functools import wraps
@@ -171,13 +170,6 @@ class SolrQuery(object):
                         filter(lambda fw: fw[1], params['qf'])))
         if 'fl' not in params:
             params['fl'] = ('*', 'score')
-
-        if params.get('defType') == 'dismax' \
-                and (self._q is None or isinstance(self._q, X) or self._q_args or self._q_kwargs):
-            # should we turn off dismax query parser in this cases?
-            # or maybe we should use q.alt parameter instead of q?
-            # params.pop('defType', None)
-            warnings.warn('DisMax query parser does not support q=*:* or q=field:text')
 
         for grouped in self._groupeds:
             params = merge_params(params, grouped.get_params())
