@@ -60,3 +60,8 @@ class DateTime(Type):
         if not m:
             raise ValueError("Cannot convert {!r} to datetime".format(value))
         return datetime.datetime(*map(int, filter(None, m.groups())))
+
+
+class Text(Type):
+    def to_python(self, value):
+        return force_unicode(value)
