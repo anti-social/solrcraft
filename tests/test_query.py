@@ -671,7 +671,7 @@ class QueryTest(TestCase):
             q = self.searcher.search()
             q = q.facet_pivot(
                 'type',
-                ('category', dict(instance_mapper=_obj_mapper, limit=3)),
+                ('category', dict(_instance_mapper=_obj_mapper, _type=Integer, limit=3)),
                 'visible',
                 _local_params=LocalParams(ex='type,category', key='tcv'))
 
@@ -688,22 +688,22 @@ class QueryTest(TestCase):
             self.assertEqual(facet.values[0].value, 'B')
             self.assertEqual(facet.values[0].count, 88203)
             self.assertEqual(facet.values[0].pivot.field, 'category')
-            self.assertEqual(facet.values[0].pivot.values[0].value, '14210102')
+            self.assertEqual(facet.values[0].pivot.values[0].value, 14210102)
             self.assertEqual(facet.values[0].pivot.values[0].count, 13801)
+            self.assertEqual(facet.values[0].pivot.values[0].instance, (14210102, '14210102 14210102'))
             self.assertEqual(facet.values[0].pivot.values[0].pivot.field, 'visible')
             self.assertEqual(facet.values[0].pivot.values[0].pivot.values[0].value, True)
             self.assertEqual(facet.values[0].pivot.values[0].pivot.values[0].count, 11159)
             self.assertEqual(facet.values[0].pivot.values[0].pivot.values[1].value, False)
             self.assertEqual(facet.values[0].pivot.values[0].pivot.values[1].count, 2642)
-            self.assertEqual(facet.values[0].pivot.values[0].instance, (14210102, '14210102 14210102'))
             self.assertEqual(facet.values[1].value, 'C')
             self.assertEqual(facet.values[1].count, 82421)
             self.assertEqual(id(facet.values[0].pivot.values[0].instance),
                              id(facet.values[1].pivot.values[0].instance))
-            self.assertEqual(facet.values[1].pivot.get_value('607').value, '607')
-            self.assertEqual(facet.values[1].pivot.get_value('607').count, 1631)
-            self.assertEqual(facet.values[1].pivot.get_value('607').pivot.get_value(True).count, 1462)
-            self.assertEqual(facet.values[1].pivot.get_value('607').pivot.get_value(False).count, 169)
+            self.assertEqual(facet.values[1].pivot.get_value(607).value, 607)
+            self.assertEqual(facet.values[1].pivot.get_value(607).count, 1631)
+            self.assertEqual(facet.values[1].pivot.get_value(607).pivot.get_value(True).count, 1462)
+            self.assertEqual(facet.values[1].pivot.get_value(607).pivot.get_value(False).count, 169)
             self.assertEqual(facet.values[2].value, 'S')
             self.assertEqual(facet.values[2].count, 3)
             self.assertRaises(IndexError, lambda: facet.values[3])

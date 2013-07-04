@@ -171,7 +171,7 @@ class FacetPivot(object):
                 elif len(field) == 2:
                     field, kw = field
             self.instance_mappers[field] = _pop_from_kwargs(kw, 'instance_mapper')
-            self.types[field] = _pop_from_kwargs(kw, 'type')
+            self.types[field] = instantiate(_pop_from_kwargs(kw, 'type'))
             self.to_pythons[field] = get_to_python(self.types[field])
             self.facet_params[field] = kw
             self.fields.append(field)
