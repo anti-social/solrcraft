@@ -114,7 +114,10 @@ class SolrQuery(object):
                 if start is not None:
                     clone._params['start'] = start
                 if stop is not None:
-                    clone._params['rows'] = stop - start
+                    if start is None:
+                        clone._params['rows'] = stop
+                    else:
+                        clone._params['rows'] = stop - start
                 return clone
             else:
                 docs = self._fetch_results().docs[k]

@@ -8,6 +8,7 @@ from mock import patch
 from solar.searcher import SolrSearcher
 from solar.util import SafeUnicode, X, LocalParams, make_fq
 from solar.types import Integer, Float, DateTime
+from solar.compat import force_unicode
 from solar import func
 
 from .base import TestCase
@@ -152,7 +153,25 @@ class QueryTest(TestCase):
         self.assertNotIn('group.field=company', raw_query)
         self.assertNotIn('group.query=status:0 AND visible:true', raw_query)
         self.assertNotIn("group.func=termfreq(text,'term')", raw_query)
-    
+
+    def test_slice(self):
+        q = self.searcher.search().offset(40).limit(20)
+        raw_query = force_unicode(q)
+        self.assertIn('start=40', raw_query)
+        self.assertIn('rows=20', raw_query)
+
+        q = self.searcher.search()
+        q = q[40:60]
+        raw_query = force_unicode(q)
+        self.assertIn('start=40', raw_query)
+        self.assertIn('rows=20', raw_query)
+
+        q = self.searcher.search()
+        q = q[:10]
+        raw_query = force_unicode(q)
+        self.assertNotIn('start', raw_query)
+        self.assertIn('rows=10', raw_query)
+        
     def test_filter(self):
         q = SolrSearcher().search()
 
