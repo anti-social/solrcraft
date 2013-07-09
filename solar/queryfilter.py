@@ -96,6 +96,7 @@ class QueryFilter(object):
 
 
 class BaseFilter(object):
+    available_operators = None
 
     def __init__(self, name, type=None):
         self.name = name
@@ -116,6 +117,13 @@ class BaseFilter(object):
                 op = 'exact'
             else:
                 op = DEFAULT_OP_SEP.join(ops[1:])
+
+            if (
+                self.available_operators is not None
+                and op not in self.available_operators
+            ):
+                continue
+
             if name == self.name:
                 if not isinstance(v, (list, tuple)):
                     v = [v]
@@ -218,6 +226,7 @@ class FacetFilterValue(FacetFilterValueMixin):
 
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
+    available_operators = ['exact']
     
     def __init__(self, name, field=None, filter_value_cls=None, type=None,
                  local_params=None, instance_mapper=None,
@@ -338,6 +347,8 @@ class FacetPivotFilter(FacetFilter):
                 
 
 class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
+    available_operators = ['exact']
+
     def __init__(self, name, *pivots, **kwargs):
         super(PivotFilter, self).__init__(name)
         self._pivots = pivots
@@ -465,6 +476,7 @@ class FacetQueryFilter(Filter):
 
 class RangeFilter(Filter):
     fq_connector = X.AND
+    available_operators = ['gte', 'lte']
 
     def __init__(self, name, field=None, type=None,
                  gather_stats=False, exclude_filter=True, **kwargs):

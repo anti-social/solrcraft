@@ -4,7 +4,8 @@ from datetime import datetime
 from collections import namedtuple
 
 from solar import X, LocalParams
-from solar.types import Integer, Boolean
+from solar.types import Integer, Float, Boolean
+from solar.compat import force_unicode
 from solar.searcher import SolrSearcher
 from solar.queryfilter import (
     QueryFilter, Filter, FacetFilter, FacetFilterValue,
@@ -32,7 +33,7 @@ class CategoryFilter(FacetFilter):
         super(CategoryFilter, self).__init__(name, *args, **kwargs)
 
 
-class QueryTest(TestCase):
+class QueryFilterTest(TestCase):
     def test_pivot_filter(self):
         with self.patch_send_request() as send_request:
             send_request.return_value = '''
@@ -122,7 +123,8 @@ class QueryTest(TestCase):
                     FacetPivotFilter('discount', type=Boolean)))
 
             params = {
-                'manu': ['samsung:note', 'nokia:n900:false', 'nothing:', 10]
+                'manu': ['samsung:note', 'nokia:n900:false', 'nothing:', 10],
+                'manu__gte': '100',
             }
 
             q = qf.apply(q, params)
@@ -183,7 +185,73 @@ class QueryTest(TestCase):
             self.assertEqual(manu_filter.all_values[2].param_value, 'lenovo')
             self.assertEqual(manu_filter.all_values[2].count, 5)
             self.assertEqual(manu_filter.all_values[2].selected, False)
-    
+
+    def test_range_filter(self):
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
+{
+  "grouped": {
+    "company": {
+      "matches": 0,
+      "ngroups": 0,
+      "groups": []
+    }
+  }
+}'''
+        
+            q = self.searcher.search()
+
+            qf = QueryFilter()
+            qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True,
+                                      _local_params=LocalParams(cache=False),
+                                      type=Float))
+
+            params = {
+                'price__gte': '100',
+                'price__lte': ['nan', '200'],
+                'price': '66',
+            }
+
+            q = qf.apply(q, params)
+            raw_query = force_unicode(q)
+
+            self.assertIn('fq={!cache=false tag=price}'
+                          'price_unit:[100.0 TO *] '
+                          'AND price_unit:[* TO 200.0]', raw_query)
+
+            results = q.results
+            with self.patch_send_request() as send_request:
+                send_request.return_value = '''
+{
+  "response": {
+    "numFound": 800,
+    "start":0,
+    "docs":[]
+  },
+  "stats": {
+    "stats_fields": {
+      "price_unit": {
+        "min": 3.5,
+        "max": 892.0,
+        "count": 1882931,
+        "missing": 556686,
+        "sum": 5.677964302447648E13,
+        "sumOfSquares": 2.452218850256837E26,
+        "mean": 3.0154924967763808E7,
+        "stddev": 1.1411980204045008E10
+      }
+    }
+  }
+}'''
+                
+                qf.process_results(results)
+
+                price_filter = qf.get_filter('price')
+                self.assertEqual(price_filter.from_value, 100)
+                self.assertEqual(price_filter.to_value, 200)
+                self.assertEqual(price_filter.min, 3.5)
+                self.assertEqual(price_filter.max, 892.0)
+
     def test_queryfilter(self):
         with self.patch_send_request() as send_request:
             send_request.return_value = '''{
@@ -229,9 +297,6 @@ class QueryTest(TestCase):
                         'week_ago',
                         X(date_created__gte='NOW/DAY-7DAY'),
                         title='Week ago')))
-            qf.add_filter(RangeFilter('price', 'price_unit', gather_stats=True,
-                                      _local_params=LocalParams(cache=False),
-                                      type=Integer))
             qf.add_filter(
                 FacetQueryFilter(
                     'dist',
@@ -256,8 +321,6 @@ class QueryTest(TestCase):
                 'cat': ['5', '13'],
                 'country': ['us', 'ru'],
                 'date_created': 'today',
-                'price__gte': '100',
-                'price__lte': ['200', 'nan'],
                 'dist': 'd10',
                 'sort': '-price',
                 }
@@ -277,71 +340,47 @@ class QueryTest(TestCase):
             self.assertIn('fq={!cache=false tag=cat}(category:"5" OR category:"13")', raw_query)
             self.assertIn('fq={!tag=country}country:"ru"', raw_query)
             self.assertIn('fq={!tag=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
-            self.assertIn('fq={!cache=false tag=price}price_unit:[100 TO *] AND price_unit:[* TO 200]', raw_query)
             self.assertIn('fq={!geofilt d=10 tag=dist}', raw_query)
             self.assertIn('sort=price desc', raw_query)
 
-            results = q.results
-            with self.patch_send_request() as send_request:
-                send_request.return_value = '''{
-  "response":{"numFound":800,"start":0,"docs":[]
-  },
-  "stats":{
-    "stats_fields":{
-      "price_unit":{
-        "min":3.5,
-        "max":892.0,
-        "count":1882931,
-        "missing":556686,
-        "sum":5.677964302447648E13,
-        "sumOfSquares":2.452218850256837E26,
-        "mean":3.0154924967763808E7,
-        "stddev":1.1411980204045008E10}}}}'''
-                
-                qf.process_results(results)
+            qf.process_results(q.results)
 
-                category_filter = qf.get_filter('cat')
-                self.assertIsInstance(category_filter, CategoryFilter)
-                self.assertEqual(category_filter.name, 'cat')
-                self.assertEqual(category_filter.field, 'category')
-                self.assertEqual(category_filter.all_values[0].value, '100')
-                self.assertEqual(category_filter.all_values[0].count, 500)
-                self.assertEqual(category_filter.all_values[0].selected, False)
-                self.assertEqual(category_filter.all_values[0].title, '100')
-                self.assertEqual(category_filter.all_values[1].value, '5')
-                self.assertEqual(category_filter.all_values[1].count, 10)
-                self.assertEqual(category_filter.all_values[1].selected, True)
-                self.assertEqual(category_filter.all_values[2].value, '2')
-                self.assertEqual(category_filter.all_values[2].count, 5)
-                self.assertEqual(category_filter.all_values[2].selected, False)
-                self.assertEqual(category_filter.all_values[3].value, '1')
-                self.assertEqual(category_filter.all_values[3].count, 2)
-                self.assertEqual(category_filter.all_values[3].selected, False)
-                self.assertEqual(category_filter.all_values[4].value, '13')
-                self.assertEqual(category_filter.all_values[4].count, 1)
-                self.assertEqual(category_filter.all_values[4].selected, True)
+            category_filter = qf.get_filter('cat')
+            self.assertIsInstance(category_filter, CategoryFilter)
+            self.assertEqual(category_filter.name, 'cat')
+            self.assertEqual(category_filter.field, 'category')
+            self.assertEqual(category_filter.all_values[0].value, '100')
+            self.assertEqual(category_filter.all_values[0].count, 500)
+            self.assertEqual(category_filter.all_values[0].selected, False)
+            self.assertEqual(category_filter.all_values[0].title, '100')
+            self.assertEqual(category_filter.all_values[1].value, '5')
+            self.assertEqual(category_filter.all_values[1].count, 10)
+            self.assertEqual(category_filter.all_values[1].selected, True)
+            self.assertEqual(category_filter.all_values[2].value, '2')
+            self.assertEqual(category_filter.all_values[2].count, 5)
+            self.assertEqual(category_filter.all_values[2].selected, False)
+            self.assertEqual(category_filter.all_values[3].value, '1')
+            self.assertEqual(category_filter.all_values[3].count, 2)
+            self.assertEqual(category_filter.all_values[3].selected, False)
+            self.assertEqual(category_filter.all_values[4].value, '13')
+            self.assertEqual(category_filter.all_values[4].count, 1)
+            self.assertEqual(category_filter.all_values[4].selected, True)
 
-                price_filter = qf.get_filter('price')
-                self.assertEqual(price_filter.from_value, 100)
-                self.assertEqual(price_filter.to_value, 200)
-                self.assertEqual(price_filter.min, 3.5)
-                self.assertEqual(price_filter.max, 892.0)
+            date_created_filter = qf.get_filter('date_created')
+            self.assertEqual(date_created_filter.get_value('today').count, 28)
+            self.assertEqual(date_created_filter.get_value('today').selected, True)
+            self.assertEqual(date_created_filter.get_value('today').title, 'Only new')
+            self.assertEqual(date_created_filter.get_value('today').opts['help_text'], 'Documents one day later')
+            self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
 
-                date_created_filter = qf.get_filter('date_created')
-                self.assertEqual(date_created_filter.get_value('today').count, 28)
-                self.assertEqual(date_created_filter.get_value('today').selected, True)
-                self.assertEqual(date_created_filter.get_value('today').title, 'Only new')
-                self.assertEqual(date_created_filter.get_value('today').opts['help_text'], 'Documents one day later')
-                self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
+            dist_filter = qf.get_filter('dist')
+            self.assertEqual(dist_filter.get_value('d5').count, 0)
+            self.assertEqual(dist_filter.get_value('d5').selected, False)
+            self.assertEqual(dist_filter.get_value('d10').count, 12)
+            self.assertEqual(dist_filter.get_value('d10').selected, True)
+            self.assertEqual(dist_filter.get_value('d20').count, 40)
+            self.assertEqual(dist_filter.get_value('d20').selected, False)
 
-                dist_filter = qf.get_filter('dist')
-                self.assertEqual(dist_filter.get_value('d5').count, 0)
-                self.assertEqual(dist_filter.get_value('d5').selected, False)
-                self.assertEqual(dist_filter.get_value('d10').count, 12)
-                self.assertEqual(dist_filter.get_value('d10').selected, True)
-                self.assertEqual(dist_filter.get_value('d20').count, 40)
-                self.assertEqual(dist_filter.get_value('d20').selected, False)
-
-                ordering_filter = qf.ordering_filter
-                self.assertEqual(ordering_filter.get_value('-price').selected, True)
-                self.assertEqual(ordering_filter.get_value('-price').direction, OrderingValue.DESC)
+            ordering_filter = qf.ordering_filter
+            self.assertEqual(ordering_filter.get_value('-price').selected, True)
+            self.assertEqual(ordering_filter.get_value('-price').direction, OrderingValue.DESC)

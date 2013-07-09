@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
 import re
+import math
 import urllib
 import logging
 from copy import deepcopy
@@ -193,7 +194,16 @@ def process_value(v, safe=False):
         return 'true'
     if v is False:
         return 'false'
-    if isinstance(v, int_types + (float,)):
+    if isinstance(v, int_types):
+        return force_unicode(v)
+    if isinstance(v, float):
+        if math.isnan(v):
+            return 'NaN'
+        if math.isinf(v):
+            if v > 0:
+                return 'Infinity'
+            else:
+                return '-Infinity'
         return force_unicode(v)
     if isinstance(v, LocalParams):
         return '"{}"'.format(force_unicode(v))

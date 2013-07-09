@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import math
 import inspect
 import datetime
 
@@ -43,6 +44,12 @@ class Integer(Type):
 class Float(Type):
     def to_python(self, value):
         return float(value)
+
+    def process_param_value(self, value):
+        v = float(value)
+        if math.isnan(v) or math.isinf(v):
+            raise ValueError('NaN or Inf is not supported')
+        return v
 
 
 class Boolean(Type):
