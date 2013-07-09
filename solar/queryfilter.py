@@ -17,9 +17,9 @@ def between_op(f, v):
 
 def isnull_op(f, v):
     if v == '1':
-        return X({'{}__isnull'.format(f): True})
+        return X(**{'{}__isnull'.format(f): True})
     elif v == '0':
-        return X({'{}__isnull'.format(f): False})
+        return X(**{'{}__isnull'.format(f): False})
     return
 
 
@@ -465,7 +465,7 @@ class FacetQueryFilter(Filter):
 
 class RangeFilter(Filter):
     fq_connector = X.AND
-    
+
     def __init__(self, name, field=None, type=None,
                  gather_stats=False, exclude_filter=True, **kwargs):
         super(RangeFilter, self).__init__(name, field, type=type, **kwargs)
@@ -476,14 +476,14 @@ class RangeFilter(Filter):
         self.stats = None
         self.min = None
         self.max = None
-    
+
     def apply(self, query, params):
         for op, v in self._filter_and_split_params(params):
             if op == 'gte':
                 self.from_value = v
             if op == 'lte':
                 self.to_value = v
-        
+
         query = super(RangeFilter, self).apply(query, params)
         if self.gather_stats and not self.exclude_filter:
             query = query.stats(self.field)
