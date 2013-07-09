@@ -34,6 +34,223 @@ class CategoryFilter(FacetFilter):
 
 
 class QueryFilterTest(TestCase):
+    def test_facet_filter(self):
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
+{
+  "grouped": {
+    "company": {
+      "matches": 0,
+      "ngroups": 0,
+      "groups": []
+    }
+  },
+  "facet_counts": {
+    "facet_queries": {},
+    "facet_fields": {
+      "cat": [
+        "100", 500,
+        "5", 10,
+        "2", 5,
+        "1", 2,
+        "13", 1
+      ]
+    },
+    "facet_dates": {},
+    "facet_ranges": {}
+  }
+}'''
+        
+            q = self.searcher.search()
+
+            qf = QueryFilter()
+            qf.add_filter(
+                CategoryFilter(
+                    'cat', 'category', mincount=1,
+                    _local_params={'cache': False}))
+            qf.add_filter(Filter('country', select_multiple=False))
+
+            params = {
+                'cat': ['5', '13'],
+                'country': ['us', 'ru'],
+            }
+
+            q = qf.apply(q, params)
+            raw_query = str(q)
+
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.field={!cache=false key=cat ex=cat}category', raw_query)
+            self.assertIn('f.category.facet.mincount=1', raw_query)
+            self.assertIn('fq={!cache=false tag=cat}(category:"5" OR category:"13")', raw_query)
+            self.assertIn('fq={!tag=country}country:"ru"', raw_query)
+
+            qf.process_results(q.results)
+
+            category_filter = qf.get_filter('cat')
+            self.assertIsInstance(category_filter, CategoryFilter)
+            self.assertEqual(category_filter.name, 'cat')
+            self.assertEqual(category_filter.field, 'category')
+            self.assertEqual(category_filter.all_values[0].value, '100')
+            self.assertEqual(category_filter.all_values[0].count, 500)
+            self.assertEqual(category_filter.all_values[0].selected, False)
+            self.assertEqual(category_filter.all_values[0].title, '100')
+            self.assertEqual(category_filter.all_values[1].value, '5')
+            self.assertEqual(category_filter.all_values[1].count, 10)
+            self.assertEqual(category_filter.all_values[1].selected, True)
+            self.assertEqual(category_filter.all_values[2].value, '2')
+            self.assertEqual(category_filter.all_values[2].count, 5)
+            self.assertEqual(category_filter.all_values[2].selected, False)
+            self.assertEqual(category_filter.all_values[3].value, '1')
+            self.assertEqual(category_filter.all_values[3].count, 2)
+            self.assertEqual(category_filter.all_values[3].selected, False)
+            self.assertEqual(category_filter.all_values[4].value, '13')
+            self.assertEqual(category_filter.all_values[4].count, 1)
+            self.assertEqual(category_filter.all_values[4].selected, True)
+
+    def test_facet_query_filter(self):
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
+{
+  "grouped": {
+    "company": {
+      "matches": 0,
+      "ngroups": 0,
+      "groups": []
+    }
+  },
+  "facet_counts": {
+    "facet_queries": {
+      "date_created__today": 28,
+      "date_created__week_ago": 105,
+      "dist__d5": 0,
+      "dist__d10": 12,
+      "dist__d20": 40
+    },
+    "facet_fields": {},
+    "facet_dates":{},
+    "facet_ranges":{}
+  }
+}'''
+        
+            q = self.searcher.search()
+
+            qf = QueryFilter()
+            qf.add_filter(
+                FacetQueryFilter(
+                    'date_created',
+                    FacetQueryFilterValue(
+                        'today',
+                        X(date_created__gte='NOW/DAY-1DAY'),
+                        title='Only new',
+                        help_text='Documents one day later'),
+                    FacetQueryFilterValue(
+                        'week_ago',
+                        X(date_created__gte='NOW/DAY-7DAY'),
+                        title='Week ago')))
+            qf.add_filter(
+                FacetQueryFilter(
+                    'dist',
+                    FacetQueryFilterValue(
+                        'd5',
+                        None, _local_params=LocalParams('geofilt', d=5)),
+                    FacetQueryFilterValue(
+                        'd10',
+                        None, _local_params=LocalParams('geofilt', d=10)),
+                    FacetQueryFilterValue(
+                        'd20',
+                        None, _local_params=LocalParams('geofilt', d=20)),
+                    select_multiple=False))
+            qf.add_ordering(
+                OrderingFilter(
+                    'sort',
+                    OrderingValue('-score', '-score'),
+                    OrderingValue('price', 'price'),
+                    OrderingValue('-price', '-price')))
+
+            params = {
+                'cat': ['5', '13'],
+                'country': ['us', 'ru'],
+                'date_created': 'today',
+                'dist': 'd10',
+                }
+
+            q = qf.apply(q, params)
+            raw_query = str(q)
+
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.query={!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
+            self.assertIn('facet.query={!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]', raw_query)
+            self.assertIn('facet.query={!geofilt d=5 key=dist__d5 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=10 key=dist__d10 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=20 key=dist__d20 ex=dist}', raw_query)
+            self.assertIn('fq={!tag=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
+            self.assertIn('fq={!geofilt d=10 tag=dist}', raw_query)
+
+            qf.process_results(q.results)
+
+            date_created_filter = qf.get_filter('date_created')
+            self.assertEqual(date_created_filter.get_value('today').count, 28)
+            self.assertEqual(date_created_filter.get_value('today').selected, True)
+            self.assertEqual(date_created_filter.get_value('today').title, 'Only new')
+            self.assertEqual(date_created_filter.get_value('today').opts['help_text'], 'Documents one day later')
+            self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
+
+            dist_filter = qf.get_filter('dist')
+            self.assertEqual(dist_filter.get_value('d5').count, 0)
+            self.assertEqual(dist_filter.get_value('d5').selected, False)
+            self.assertEqual(dist_filter.get_value('d10').count, 12)
+            self.assertEqual(dist_filter.get_value('d10').selected, True)
+            self.assertEqual(dist_filter.get_value('d20').count, 40)
+            self.assertEqual(dist_filter.get_value('d20').selected, False)
+
+    def test_ordering_filter(self):
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
+{
+  "grouped": {
+    "company": {
+      "matches": 0,
+      "ngroups": 0,
+      "groups": []
+    }
+  },
+  "facet_counts": {
+    "facet_queries": {
+      "date_created__today": 28,
+      "date_created__week_ago": 105,
+      "dist__d5": 0,
+      "dist__d10": 12,
+      "dist__d20": 40
+    },
+    "facet_fields": {},
+    "facet_dates":{},
+    "facet_ranges":{}
+  }
+}'''
+        
+            q = self.searcher.search()
+
+            qf = QueryFilter()
+            qf.add_ordering(
+                OrderingFilter(
+                    'sort',
+                    OrderingValue('-score', '-score'),
+                    OrderingValue('price', 'price'),
+                    OrderingValue('-price', '-price')))
+
+            params = {
+                'sort': '-price',
+            }
+
+            q = qf.apply(q, params)
+            raw_query = str(q)
+
+            self.assertIn('sort=price desc', raw_query)
+
+            ordering_filter = qf.ordering_filter
+            self.assertEqual(ordering_filter.get_value('-price').selected, True)
+            self.assertEqual(ordering_filter.get_value('-price').direction, OrderingValue.DESC)
+
     def test_pivot_filter(self):
         with self.patch_send_request() as send_request:
             send_request.return_value = '''
@@ -251,136 +468,3 @@ class QueryFilterTest(TestCase):
                 self.assertEqual(price_filter.to_value, 200)
                 self.assertEqual(price_filter.min, 3.5)
                 self.assertEqual(price_filter.max, 892.0)
-
-    def test_queryfilter(self):
-        with self.patch_send_request() as send_request:
-            send_request.return_value = '''{
-  "grouped":{
-    "company":{
-      "matches":0,
-      "ngroups":0,
-      "groups":[]}},
-  "facet_counts":{
-    "facet_queries":{
-      "date_created__today":28,
-      "date_created__week_ago":105,
-      "dist__d5":0,
-      "dist__d10":12,
-      "dist__d20":40},
-    "facet_fields":{
-      "cat":[
-        "100",500,
-        "5",10,
-        "2",5,
-        "1",2,
-        "13",1]},
-    "facet_dates":{},
-    "facet_ranges":{}}}'''
-        
-            q = self.searcher.search()
-
-            qf = QueryFilter()
-            qf.add_filter(
-                CategoryFilter(
-                    'cat', 'category', mincount=1,
-                    _local_params={'cache': False}))
-            qf.add_filter(Filter('country', select_multiple=False))
-            qf.add_filter(
-                FacetQueryFilter(
-                    'date_created',
-                    FacetQueryFilterValue(
-                        'today',
-                        X(date_created__gte='NOW/DAY-1DAY'),
-                        title='Only new',
-                        help_text='Documents one day later'),
-                    FacetQueryFilterValue(
-                        'week_ago',
-                        X(date_created__gte='NOW/DAY-7DAY'),
-                        title='Week ago')))
-            qf.add_filter(
-                FacetQueryFilter(
-                    'dist',
-                    FacetQueryFilterValue(
-                        'd5',
-                        None, _local_params=LocalParams('geofilt', d=5)),
-                    FacetQueryFilterValue(
-                        'd10',
-                        None, _local_params=LocalParams('geofilt', d=10)),
-                    FacetQueryFilterValue(
-                        'd20',
-                        None, _local_params=LocalParams('geofilt', d=20)),
-                    select_multiple=False))
-            qf.add_ordering(
-                OrderingFilter(
-                    'sort',
-                    OrderingValue('-score', '-score'),
-                    OrderingValue('price', 'price'),
-                    OrderingValue('-price', '-price')))
-
-            params = {
-                'cat': ['5', '13'],
-                'country': ['us', 'ru'],
-                'date_created': 'today',
-                'dist': 'd10',
-                'sort': '-price',
-                }
-
-            q = qf.apply(q, params)
-            raw_query = str(q)
-
-            self.assertIn('facet=true', raw_query)
-            self.assertIn('facet.field={!cache=false key=cat ex=cat}category', raw_query)
-            self.assertIn('facet.query={!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
-            self.assertIn('facet.query={!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]', raw_query)
-            self.assertIn('facet.query={!geofilt d=5 key=dist__d5 ex=dist}', raw_query)
-            self.assertIn('facet.query={!geofilt d=10 key=dist__d10 ex=dist}', raw_query)
-            self.assertIn('facet.query={!geofilt d=20 key=dist__d20 ex=dist}', raw_query)
-            # self.assertIn('stats=true', raw_query)
-            # self.assertIn('stats.field=price_unit', raw_query)
-            self.assertIn('fq={!cache=false tag=cat}(category:"5" OR category:"13")', raw_query)
-            self.assertIn('fq={!tag=country}country:"ru"', raw_query)
-            self.assertIn('fq={!tag=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
-            self.assertIn('fq={!geofilt d=10 tag=dist}', raw_query)
-            self.assertIn('sort=price desc', raw_query)
-
-            qf.process_results(q.results)
-
-            category_filter = qf.get_filter('cat')
-            self.assertIsInstance(category_filter, CategoryFilter)
-            self.assertEqual(category_filter.name, 'cat')
-            self.assertEqual(category_filter.field, 'category')
-            self.assertEqual(category_filter.all_values[0].value, '100')
-            self.assertEqual(category_filter.all_values[0].count, 500)
-            self.assertEqual(category_filter.all_values[0].selected, False)
-            self.assertEqual(category_filter.all_values[0].title, '100')
-            self.assertEqual(category_filter.all_values[1].value, '5')
-            self.assertEqual(category_filter.all_values[1].count, 10)
-            self.assertEqual(category_filter.all_values[1].selected, True)
-            self.assertEqual(category_filter.all_values[2].value, '2')
-            self.assertEqual(category_filter.all_values[2].count, 5)
-            self.assertEqual(category_filter.all_values[2].selected, False)
-            self.assertEqual(category_filter.all_values[3].value, '1')
-            self.assertEqual(category_filter.all_values[3].count, 2)
-            self.assertEqual(category_filter.all_values[3].selected, False)
-            self.assertEqual(category_filter.all_values[4].value, '13')
-            self.assertEqual(category_filter.all_values[4].count, 1)
-            self.assertEqual(category_filter.all_values[4].selected, True)
-
-            date_created_filter = qf.get_filter('date_created')
-            self.assertEqual(date_created_filter.get_value('today').count, 28)
-            self.assertEqual(date_created_filter.get_value('today').selected, True)
-            self.assertEqual(date_created_filter.get_value('today').title, 'Only new')
-            self.assertEqual(date_created_filter.get_value('today').opts['help_text'], 'Documents one day later')
-            self.assertEqual(date_created_filter.get_value('week_ago').count, 105)
-
-            dist_filter = qf.get_filter('dist')
-            self.assertEqual(dist_filter.get_value('d5').count, 0)
-            self.assertEqual(dist_filter.get_value('d5').selected, False)
-            self.assertEqual(dist_filter.get_value('d10').count, 12)
-            self.assertEqual(dist_filter.get_value('d10').selected, True)
-            self.assertEqual(dist_filter.get_value('d20').count, 40)
-            self.assertEqual(dist_filter.get_value('d20').selected, False)
-
-            ordering_filter = qf.ordering_filter
-            self.assertEqual(ordering_filter.get_value('-price').selected, True)
-            self.assertEqual(ordering_filter.get_value('-price').direction, OrderingValue.DESC)
