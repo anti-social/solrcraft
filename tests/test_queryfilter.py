@@ -38,6 +38,21 @@ class QueryFilterTest(TestCase):
         # this test case shouldn't raise exception
         qf = QueryFilter()
         qf.add_filter(FacetFilter('test'))
+        qf.add_filter(
+            PivotFilter(
+                'pivot_test',
+                FacetPivotFilter('a'),
+                FacetPivotFilter('b'),
+            )
+        )
+        qf.add_ordering(
+            OrderingFilter(
+                'sort',
+                OrderingValue('-score', '-score'),
+                OrderingValue('price', 'price'),
+                default='-score',
+            )
+        )
 
         q = self.searcher.search()
 
@@ -45,6 +60,9 @@ class QueryFilterTest(TestCase):
             111: 222,
             '\ufffd': '',
             '\uffff'.encode('utf-8'): '',
+            'test': ['\ufffd', '\uffff'.encode('utf-8')],
+            'pivot_test': ['\ufffd', '\uffff'.encode('utf-8')],
+            'sort': ['\ufffd', '\uffff'.encode('utf-8')],
         }
         q = qf.apply(q, params)
     
