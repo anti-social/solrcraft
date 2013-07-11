@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
 from copy import deepcopy
+from itertools import starmap
 
 from .util import X, LocalParams, make_fq, process_value, _pop_from_kwargs
 from .types import instantiate, get_to_python, Boolean
@@ -110,7 +111,7 @@ class BaseFilter(object):
     def _filter_and_split_params(self, params):
         """Returns [(operator1, value1), (operator2, value2)]"""
         items = []
-        for p, v in sorted(params.items(), key=lambda i: i[0]):
+        for p, v in sorted(starmap(lambda p, v: (force_unicode(p), v), params.items())):
             ops = p.split(DEFAULT_OP_SEP)
             name = ops[0]
             if len(ops) == 1:

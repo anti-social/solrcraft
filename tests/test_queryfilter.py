@@ -34,6 +34,20 @@ class CategoryFilter(FacetFilter):
 
 
 class QueryFilterTest(TestCase):
+    def test_apply_insane_params(self):
+        # this test case shouldn't raise exception
+        qf = QueryFilter()
+        qf.add_filter(FacetFilter('test'))
+
+        q = self.searcher.search()
+
+        params = {
+            111: 222,
+            '\ufffd': '',
+            '\uffff'.encode('utf-8'): '',
+        }
+        q = qf.apply(q, params)
+    
     def test_facet_filter(self):
         with self.patch_send_request() as send_request:
             send_request.return_value = '''
