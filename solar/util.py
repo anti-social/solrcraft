@@ -12,7 +12,10 @@ try:
 except ImportError:
     from ordereddict import OrderedDict
 
-from .compat import PY2, text_type, string_types, binary_type, int_types, force_unicode
+from .compat import (
+    PY2, text_type, string_types, binary_type, int_types, force_unicode,
+    implements_to_string,
+)
 from .tree import Node
 
 
@@ -118,6 +121,7 @@ class X(Node):
 
 X_ALL = X(ALL)
 
+@implements_to_string
 class LocalParams(OrderedDict):
     SPECIAL_CHARACTERS = " '" + SPECIAL_CHARACTERS
     
@@ -173,6 +177,8 @@ class LocalParams(OrderedDict):
 
         parts = []
         for key, value in self.items():
+            if isinstance(value, (list, tuple)):
+                value = ','.join(value)
             if key == 'type':
                 parts.insert(0, value)
             else:
