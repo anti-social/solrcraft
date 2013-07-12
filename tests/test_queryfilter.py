@@ -99,8 +99,9 @@ class QueryFilterTest(TestCase):
             qf.add_filter(
                 CategoryFilter(
                     'cat', 'category', mincount=1,
-                    _local_params={'cache': False}))
-            qf.add_filter(Filter('country', select_multiple=False))
+                    _local_params={'cache': False, 'ex': ('test',)}))
+            qf.add_filter(Filter('country', select_multiple=False,
+                                 _local_params=LocalParams(tag='cc')))
 
             params = {
                 'cat': ['5', '13'],
@@ -108,13 +109,13 @@ class QueryFilterTest(TestCase):
             }
 
             q = qf.apply(q, params)
-            raw_query = str(q)
+            raw_query = force_unicode(q)
 
             self.assertIn('facet=true', raw_query)
-            self.assertIn('facet.field={!cache=false key=cat ex=cat}category', raw_query)
+            self.assertIn('facet.field={!cache=false ex=test,cat key=cat}category', raw_query)
             self.assertIn('f.category.facet.mincount=1', raw_query)
-            self.assertIn('fq={!cache=false tag=cat}(category:"5" OR category:"13")', raw_query)
-            self.assertIn('fq={!tag=country}country:"ru"', raw_query)
+            self.assertIn('fq={!cache=false ex=test tag=cat}(category:"5" OR category:"13")', raw_query)
+            self.assertIn('fq={!tag=cc,country}country:"ru"', raw_query)
 
             qf.process_results(q.results)
 
@@ -173,6 +174,7 @@ class QueryFilterTest(TestCase):
                     FacetQueryFilterValue(
                         'today',
                         X(date_created__gte='NOW/DAY-1DAY'),
+                        _local_params=LocalParams(ex='test'),
                         title='Only new',
                         help_text='Documents one day later'),
                     FacetQueryFilterValue(
@@ -184,13 +186,13 @@ class QueryFilterTest(TestCase):
                     'dist',
                     FacetQueryFilterValue(
                         'd5',
-                        None, _local_params=LocalParams('geofilt', d=5)),
+                        None, _local_params=LocalParams('geofilt', d=5, tag='d5')),
                     FacetQueryFilterValue(
                         'd10',
-                        None, _local_params=LocalParams('geofilt', d=10)),
+                        None, _local_params=LocalParams('geofilt', d=10, tag='d10')),
                     FacetQueryFilterValue(
                         'd20',
-                        None, _local_params=LocalParams('geofilt', d=20)),
+                        None, _local_params=LocalParams('geofilt', d=20, tag='d20')),
                     select_multiple=False))
             qf.add_ordering(
                 OrderingFilter(
@@ -207,16 +209,16 @@ class QueryFilterTest(TestCase):
                 }
 
             q = qf.apply(q, params)
-            raw_query = str(q)
+            raw_query = force_unicode(q)
 
             self.assertIn('facet=true', raw_query)
-            self.assertIn('facet.query={!key=date_created__today ex=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
+            self.assertIn('facet.query={!ex=test,date_created key=date_created__today}date_created:[NOW/DAY-1DAY TO *]', raw_query)
             self.assertIn('facet.query={!key=date_created__week_ago ex=date_created}date_created:[NOW/DAY-7DAY TO *]', raw_query)
-            self.assertIn('facet.query={!geofilt d=5 key=dist__d5 ex=dist}', raw_query)
-            self.assertIn('facet.query={!geofilt d=10 key=dist__d10 ex=dist}', raw_query)
-            self.assertIn('facet.query={!geofilt d=20 key=dist__d20 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=5 tag=d5 key=dist__d5 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=10 tag=d10 key=dist__d10 ex=dist}', raw_query)
+            self.assertIn('facet.query={!geofilt d=20 tag=d20 key=dist__d20 ex=dist}', raw_query)
             self.assertIn('fq={!tag=date_created}date_created:[NOW/DAY-1DAY TO *]', raw_query)
-            self.assertIn('fq={!geofilt d=10 tag=dist}', raw_query)
+            self.assertIn('fq={!geofilt d=10 tag=d10,dist}', raw_query)
 
             qf.process_results(q.results)
 
@@ -275,7 +277,7 @@ class QueryFilterTest(TestCase):
             }
 
             q = qf.apply(q, params)
-            raw_query = str(q)
+            raw_query = force_unicode(q)
 
             self.assertIn('sort=price desc', raw_query)
 
@@ -377,7 +379,7 @@ class QueryFilterTest(TestCase):
             }
 
             q = qf.apply(q, params)
-            raw_query = str(q)
+            raw_query = force_unicode(q)
 
             self.assertIn('facet=true', raw_query)
             self.assertIn('facet.pivot={!key=manu ex=manu}manufacturer,model,discount', raw_query)
@@ -465,8 +467,9 @@ class QueryFilterTest(TestCase):
             raw_query = force_unicode(q)
 
             self.assertIn('fq={!cache=false tag=price}'
-                          'price_unit:[100.0 TO *] '
-                          'AND price_unit:[* TO 200.0]', raw_query)
+                          'price_unit:[100.0 TO *]', raw_query)
+            self.assertIn('fq={!cache=false tag=price}'
+                          'price_unit:[* TO 200.0]', raw_query)
 
             results = q.results
             with self.patch_send_request() as send_request:

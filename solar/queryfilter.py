@@ -152,21 +152,32 @@ class Filter(BaseFilter):
         self.default = default
     
     def _filter_query(self, query, fqs):
-        if fqs:
-            if self.select_multiple:
+        if not fqs:
+            return query
+
+        if self.select_multiple:
+            if self.fq_connector == X.OR:
                 local_params = LocalParams(self.local_params)
-                local_params['tag'] = self.name
+                local_params.merge({'tag': self.name})
                 xs = [x for x, lp in fqs if x]
                 if xs:
                     return query.filter(*xs,
                                         _local_params=local_params,
                                         _op=self.fq_connector)
             else:
-                x, lp = fqs[-1]
-                local_params = LocalParams(lp)
-                if x or local_params:
-                    local_params['tag'] = self.name
-                    return query.filter(x, _local_params=local_params)
+                for x, lp in fqs:
+                    if x:
+                        local_params = LocalParams(lp)
+                        local_params.merge({'tag': self.name})
+                        query = query.filter(x, _local_params=local_params)
+                return query
+        else:
+            x, lp = fqs[-1]
+            local_params = LocalParams(lp)
+            if x or local_params:
+                local_params.merge({'tag': self.name})
+                return query.filter(x, _local_params=local_params)
+
         return query
 
     def _make_x(self, op, v):
@@ -264,7 +275,7 @@ class FacetFilter(Filter):
         query = super(FacetFilter, self).apply(query, params)
         local_params = LocalParams(self.local_params)
         local_params['key'] = self.name
-        local_params['ex'] = self.name
+        local_params.merge({'ex': self.name})
         query = query.facet_field(
             self.field, _local_params=local_params,
             _instance_mapper=self.instance_mapper, _type=self.type,
@@ -368,7 +379,7 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
     def apply(self, query, params):
         local_params = LocalParams(self.local_params)
         local_params['key'] = self.name
-        local_params['ex'] = self.name
+        local_params.merge({'ex': self.name})
         query = query.facet_pivot(
             *zip(self._pivot_fields, self._pivot_kwargs),
             _local_params=local_params)
@@ -382,7 +393,7 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
                     x = x & op_func(field, v)
                 fqs.append(x)
         local_params = LocalParams()
-        local_params['tag'] = self.name
+        local_params.merge({'tag': self.name})
         if fqs:
             query = query.filter(X(*fqs, _op='OR'), _local_params=local_params)
         return query
@@ -456,7 +467,7 @@ class FacetQueryFilter(Filter):
         for filter_value in self.filter_values:
             local_params = LocalParams(filter_value.local_params)
             local_params['key'] = filter_value._key
-            local_params['ex'] = self.name
+            local_params.merge({'ex': self.name})
             query = query.facet_query(
                 filter_value.fq,
                 _local_params=local_params)

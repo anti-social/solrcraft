@@ -163,6 +163,18 @@ class LocalParams(OrderedDict):
         
         self[key] = value
 
+    def merge(self, lp):
+        for key, value in lp.items():
+            if not isinstance(value, (list, tuple)):
+                value = [value]
+            if key in self:
+                if not isinstance(self[key], (list, tuple)):
+                    self[key] = [self[key]] + list(value)
+                else:
+                    self[key] = list(self[key]) + list(value)
+            else:
+                self[key] = value
+
     def _quote(self, value, replace_words=True):
         value = force_unicode(value)
         if replace_words:
