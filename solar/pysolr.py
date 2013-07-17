@@ -52,7 +52,7 @@ except NameError:
 
 __author__ = 'Daniel Lindsley, Joseph Kocherhans, Jacob Kaplan-Moss'
 __all__ = ['Solr']
-__version__ = (3, 0, 5)
+__version__ = (3, 1, 0)
 
 
 def get_version():
@@ -117,7 +117,7 @@ def force_bytes(value):
     """
     if IS_PY3:
         if isinstance(value, str):
-            value = value.encode('utf-8')
+            value = value.encode('utf-8', 'backslashreplace')
     else:
         if isinstance(value, unicode):
             value = value.encode('utf-8')
@@ -179,6 +179,33 @@ def safe_urlencode(params, doseq=0):
             new_params.append((k, force_bytes(v)))
 
     return urlencode(new_params, doseq)
+
+
+def is_valid_xml_char_ordinal(i):
+    """
+    Defines whether char is valid to use in xml document
+
+    XML standard defines a valid char as::
+
+    Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+    """
+    return ( # conditions ordered by presumed frequency
+        0x20 <= i <= 0xD7FF
+        or i in (0x9, 0xA, 0xD)
+        or 0xE000 <= i <= 0xFFFD
+        or 0x10000 <= i <= 0x10FFFF
+        )
+
+
+def clean_xml_string(s):
+    """
+    Cleans string from invalid xml chars
+
+    Solution was found there::
+
+    http://stackoverflow.com/questions/8733233/filtering-out-certain-bytes-in-python
+    """
+    return ''.join(c for c in s if is_valid_xml_char_ordinal(ord(c)))
 
 
 class SolrError(Exception):
@@ -247,6 +274,9 @@ class Solr(object):
         method = method.lower()
         log_body = body
 
+        if headers is None:
+            headers = {}
+
         if log_body is None:
             log_body = ''
         elif not isinstance(log_body, str):
@@ -262,20 +292,17 @@ class Solr(object):
             raise SolrError("Unable to send HTTP method '{0}.".format(method))
 
         try:
-            # Bytes all the way down.
-            # Except the ``url``. Requests on Py3 *really* wants that to be a
-            # string, not bytes.
+            # Everything except the body can be Unicode. The body must be
+            # encoded to bytes to work properly on Py3.
             bytes_body = body
-            bytes_headers = {}
 
             if bytes_body is not None:
                 bytes_body = force_bytes(body)
 
-            if headers is not None:
-                for k, v in headers.items():
-                    bytes_headers[force_bytes(k)] = force_bytes(v)
+            if not 'content-type' in [key.lower() for key in headers.keys()]:
+                headers['Content-type'] = 'application/xml; charset=UTF-8'
 
-            resp = requests_method(url, data=bytes_body, headers=bytes_headers, files=files,
+            resp = requests_method(url, data=bytes_body, headers=headers, files=files,
                                    timeout=self.timeout)
         except requests.exceptions.Timeout as err:
             error_message = "Connection to server '%s' timed out: %s"
@@ -442,6 +469,13 @@ class Solr(object):
                     if len(children) >= 2 and 'message' in children[0].text.lower():
                         reason = children[1].text
 
+                    if len(children) >= 2 and hasattr(children[0], 'renderContents'):
+                        if 'description' in children[0].renderContents().lower():
+                            if reason is None:
+                                reason = children[1].renderContents()
+                            else:
+                                reason += ", " + children[1].renderContents()
+
                 if reason is None:
                     from lxml.html.clean import clean_html
                     full_html = clean_html(response)
@@ -504,7 +538,7 @@ class Solr(object):
 
             value = "{0}".format(value)
 
-        return value
+        return clean_xml_string(value)
 
     def _to_python(self, value):
         """
