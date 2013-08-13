@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 
 import random
 
-from .compat import with_metaclass
+from .compat import text_type, with_metaclass
 from .pysolr import Solr
 from .query import SolrQuery
 from .util import SafeUnicode, X, make_q
@@ -23,7 +23,6 @@ class SolrSearcherMeta(type):
 
 
 class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
-    solr_url = None
     unique_field = 'id'
 
     model = None
@@ -35,10 +34,12 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     group_cls = Group
     document_cls = Document
 
-    def __init__(self, solr_url=None, model=None, session=None, db_field=None,
+    def __init__(self, solr=None, model=None, session=None, db_field=None,
                  query_cls=None, group_cls=None, document_cls=None):
-        self.solr_url = solr_url or self.solr_url
-        self.solr = Solr(self.solr_url)
+        if isinstance(solr, text_type):
+            self.solr = Solr(solr)
+        else:
+            self.solr = solr
 
         self.model = model or self.model
         self.session = session or self.session
@@ -106,6 +107,7 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
                 instances[orig_id] = obj
 
         return instances
+
 
 class CommonSearcher(SolrSearcher):
     unique_field = '_id'
