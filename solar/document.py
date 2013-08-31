@@ -17,5 +17,11 @@ class Document(object):
                 self._instance = None
         return self._instance
 
+    @property
+    def highlighted(self):
+        id = getattr(self, self._results.searcher.unique_field, None)
+        if id:
+            return self._results.highlighted.get(id)
+
     def to_solr(self):
         return dict((f, getattr(self, f)) for f in self._fields)

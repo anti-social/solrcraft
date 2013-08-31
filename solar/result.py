@@ -34,6 +34,7 @@ class SolrResults(object):
             doc = self.searcher.document_cls(_results=self, **raw_doc)
             self.docs.append(doc)
 
+        self.highlighted = self.raw_results.highlighting
         self.debug_info = self.raw_results.debug
 
     def __bool__(self):

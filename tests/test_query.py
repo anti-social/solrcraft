@@ -1419,3 +1419,81 @@ class QueryTest(TestCase):
             with self.assertRaises(RuntimeError) as cm:
                 q.results
             self.assertEqual(cm.exception.args, ('AttributeError', 'no such attribute'))
+
+    def test_highlight(self):
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
+{
+  "response": {
+    "numFound": 10,
+    "start": 0,
+    "docs": [
+      {
+        "id": "2919"
+      },
+      {
+        "id": "14141"
+      },
+      {
+        "id": "13125"
+      }
+    ]
+  },
+  "highlighting": {
+    "2919": {
+      "description": [
+        "{em}Test's{/em}"
+      ],
+      "name": [
+        "Highlight {em}test{/em}"
+      ]
+    },
+    "13125": {
+      "name": [
+        "Simple {em}test{/em}",
+        "More {em}tests{/em}"
+      ]
+    },
+    "14141": {
+      "name": [
+        "Real highlighting {em}test{/em}"
+      ]
+    }
+  }
+}'''
+
+            q = (
+                self.searcher.search('test')
+                .highlight('name', 'description',
+                           snippets=2,
+                           simple_pre='{em}', simple_post='{/em}')
+            )
+
+            raw_query = str(q)
+
+            self.assertIn('hl=true', raw_query)
+            self.assertIn('hl.fl=name,description', raw_query)
+            self.assertIn('hl.snippets=2', raw_query)
+            self.assertIn('hl.simple.pre={em}', raw_query)
+            self.assertIn('hl.simple.post={/em}', raw_query)
+
+            r = q.results
+
+            self.assertEqual(r.docs[0].highlighted,
+                             {'name': ['Highlight {em}test{/em}'],
+                              'description': ['{em}Test\'s{/em}']})
+            self.assertEqual(r.docs[1].highlighted,
+                             {'name': ['Real highlighting {em}test{/em}']})
+            self.assertEqual(r.docs[2].highlighted,
+                             {'name': ['Simple {em}test{/em}',
+                                       'More {em}tests{/em}']})
+
+            q = q.highlight(None)
+
+            raw_query = str(q)
+
+            self.assertNotIn('hl=true', raw_query)
+            self.assertNotIn('hl.fl=name,description', raw_query)
+            self.assertNotIn('hl.snippets=2', raw_query)
+            self.assertNotIn('hl.simple.pre={em}', raw_query)
+            self.assertNotIn('hl.simple.post={/em}', raw_query)

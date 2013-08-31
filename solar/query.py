@@ -218,6 +218,7 @@ class SolrQuery(object):
     def _add_component(self, name, **kwargs):
         self._params[name] = True
         for p, v in kwargs.items():
+            p = p.replace('_', '.')
             if v is not None:
                 self._params['{}.{}'.format(name, p)] = v
         
@@ -466,6 +467,32 @@ class SolrQuery(object):
         self._stats_fields.append(
             Stats(field, facet_fields=facet_fields))
         self._params['stats'] = True
+
+    @_with_clone
+    def highlight(self, *fields, **hl_params):
+        """Truns on/off solr highlighting compenent.
+
+        :param \*fields: List of fields for which to generate
+                        highlighted snippets (fragments)
+        
+        :param \*\*hl_params:
+        see http://wiki.apache.org/solr/HighlightingParameters
+
+        Some of :param \*\*hl_params: ::
+            :keyword snippets: The maximum number of highlighted snippets
+                               to generate per field
+
+            :keyword fragsize: The size of the snippets
+
+            :keyword simple_pre: /
+            :keyword simple_post: The text which appears before and after
+                                  a highlighted term when using the `simple` formatter
+        """
+        if len(fields) == 1 and fields[0] is None:
+            self._remove_component('hl')
+        else:
+            hl_params['fl'] = fields
+            self._add_component('hl', **hl_params)
 
     def get(self, *args, **kwargs):
         clone = self.filter(*args, **kwargs).limit(1)
