@@ -200,16 +200,24 @@ class Filter(BaseFilter):
 
 class FacetFilterValueMixin(object):
     def __unicode__(self):
-        return unicode(self.title)
+        return force_unicode(self.title)
 
     @property
     def title(self):
         if self._title:
             return self._title
         elif self.instance:
-            return unicode(self.instance)
-        return self.value
+            return force_unicode(self.instance)
+        return force_unicode(self.value)
 
+    @property
+    def filter_name(self):
+        return self.filter.name
+
+    @property
+    def select_multiple(self):
+        return self.filter.select_multiple
+        
     @property
     def value(self):
         return self.facet_value.value
@@ -223,13 +231,22 @@ class FacetFilterValueMixin(object):
         return self.facet_value.count
     
     @property
+    def count_plus(self):
+        if not self.selected \
+           and self.filter.select_multiple \
+           and self.filter.selected_values \
+           and self.filter.fq_connector == X.OR:
+            return '+{}'.format(self.facet_value.count)
+        return '{}'.format(self.facet_value.count)
+
+    @property
     def instance(self):
         return self.facet_value.instance
 
     
 class FacetFilterValue(FacetFilterValueMixin):
-    def __init__(self, filter_name, facet_value, selected, title=None, **kwargs):
-        self.filter_name = filter_name
+    def __init__(self, filter, facet_value, selected, title=None, **kwargs):
+        self.filter = filter
         self.facet_value = facet_value
         self.selected = selected
         self._title = title
@@ -286,13 +303,15 @@ class FacetFilter(Filter):
         self.values = []
         self.all_values = []
         self.selected_values = []
-        selected_values = set(params.get(self.name, []))
-        for facet in results.facet_fields:
-            if facet.local_params.get('key') == self.name:
-                for fv in facet.values:
-                    selected = fv.value in selected_values
-                    self.add_value(self.filter_value_cls(self.name, fv, selected))
-                break
+        selected_values = set(self.to_python(v) for v in params.get(self.name, []))
+        facet = results.get_facet_field(self.name)
+        if facet:
+            for fv in facet.values:
+                selected = fv.value in selected_values
+                self.add_value(
+                    self.filter_value_cls(
+                        self, fv, selected,
+                        select_multiple=self.select_multiple))
 
 
 class FacetPivotFilterValueMixin(object):
@@ -310,9 +329,9 @@ class FacetPivotFilterValueMixin(object):
 
 
 class FacetPivotFilterValue(FacetFilterValueMixin, FacetPivotFilterValueMixin):
-    def __init__(self, filter_name, facet_values, selected, title=None,
+    def __init__(self, filter, facet_values, selected, title=None,
                  **kwargs):
-        self.filter_name = filter_name
+        self.filter = filter
         self.facet_values = facet_values
         self.facet_value = facet_values[-1]
         self.selected = selected
@@ -323,7 +342,11 @@ class FacetPivotFilterValue(FacetFilterValueMixin, FacetPivotFilterValueMixin):
     @property
     def param_value(self):
         return DEFAULT_VAL_SEP.join(process_value(fv.value, safe=True) for fv in self.facet_values)
-    
+
+    @property
+    def filter_name(self):
+        return self.filter._pivot_filter.name
+
 
 class FacetPivotFilter(FacetFilter):
     filter_value_cls = FacetPivotFilterValue
@@ -346,7 +369,7 @@ class FacetPivotFilter(FacetFilter):
         for fv in facet.values:
             selected = fv.value in cur_selected_values
             filter_value = self.filter_value_cls(
-                self._pivot_filter.name, facet_values + [fv], selected)
+                self, facet_values + [fv], selected)
             self.add_value(filter_value)
             if fv.pivot:
                 pivot_filter = pivot_filters[0].bind(self._pivot_filter)
@@ -360,6 +383,7 @@ class FacetPivotFilter(FacetFilter):
 
 class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
     available_operators = ['exact']
+    fq_connector = X.OR
 
     def __init__(self, name, *pivots, **kwargs):
         super(PivotFilter, self).__init__(name)
@@ -395,7 +419,7 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         local_params = LocalParams()
         local_params.merge({'tag': self.name})
         if fqs:
-            query = query.filter(X(*fqs, _op='OR'), _local_params=local_params)
+            query = query.filter(X(*fqs, _op=self.fq_connector), _local_params=local_params)
         return query
 
     def process_results(self, results, params):
