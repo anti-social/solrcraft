@@ -34,10 +34,10 @@ class SolrSearcher(with_metaclass(SolrSearcherMeta, object)):
     group_cls = Group
     document_cls = Document
 
-    def __init__(self, solr=None, model=None, session=None, db_field=None,
+    def __init__(self, solr_url=None, solr=None, model=None, session=None, db_field=None,
                  query_cls=None, group_cls=None, document_cls=None):
-        if isinstance(solr, text_type):
-            self.solr = Solr(solr)
+        if solr_url:
+            self.solr = Solr(solr_url)
         else:
             self.solr = solr
 
