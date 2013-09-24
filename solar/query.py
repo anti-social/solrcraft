@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 import re
 import sys
 import logging
-from copy import copy, deepcopy
 from itertools import chain, starmap
 from functools import wraps
 
@@ -139,7 +138,7 @@ class SolrQuery(object):
         return self._result_cache
 
     def _prepare_params(self, only_count=False):
-        params = deepcopy(self._params)
+        params = self._params.copy()
         self._modify_params(params, only_count=only_count)
         prepared_params = {}
         for key, val in params.items():
@@ -196,16 +195,16 @@ class SolrQuery(object):
     def _clone(self, cls=None):
         cls = cls or self.__class__
         clone = cls(self.searcher, self._q, *self._q_args, **self._q_kwargs)
-        clone._q_local_params = deepcopy(self._q_local_params)
-        clone._fq = deepcopy(self._fq)
-        clone._groupeds = deepcopy(self._groupeds)
-        clone._facet_fields = deepcopy(self._facet_fields)
-        clone._facet_queries = deepcopy(self._facet_queries)
-        clone._facet_ranges = deepcopy(self._facet_ranges)
-        clone._facet_dates = deepcopy(self._facet_dates)
-        clone._facet_pivots = deepcopy(self._facet_pivots)
-        clone._stats_fields = deepcopy(self._stats_fields)
-        clone._params = deepcopy(self._params)
+        clone._q_local_params = self._q_local_params
+        clone._fq = list(self._fq)
+        clone._groupeds = list(self._groupeds)
+        clone._facet_fields = list(self._facet_fields)
+        clone._facet_queries = list(self._facet_queries)
+        clone._facet_ranges = list(self._facet_ranges)
+        clone._facet_dates = list(self._facet_dates)
+        clone._facet_pivots = list(self._facet_pivots)
+        clone._stats_fields = list(self._stats_fields)
+        clone._params = self._params.copy()
         clone._instance_mapper = self._instance_mapper
         clone._db_query = self._db_query
         clone._iter_instances = self._iter_instances
@@ -288,14 +287,16 @@ class SolrQuery(object):
     @_with_clone
     def field_weight(self, field_name, weight=1):
         if 'qf' not in self._params:
-            self._params['qf'] = []
-        qf = self._params['qf']
+            qf = []
+        else:
+            qf = list(self._params['qf'])
         for i, (f, w) in enumerate(qf):
             if f == field_name:
                 qf[i] = (field_name, weight)
                 break
         else:
             qf.append((field_name, weight))
+        self._params['qf'] = qf
 
     @_with_clone
     def order_by(self, *args):
