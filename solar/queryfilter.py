@@ -308,10 +308,7 @@ class FacetFilter(Filter):
         if facet:
             for fv in facet.values:
                 selected = fv.value in selected_values
-                self.add_value(
-                    self.filter_value_cls(
-                        self, fv, selected,
-                        select_multiple=self.select_multiple))
+                self.add_value(self.filter_value_cls(self, fv, selected))
 
 
 class FacetPivotFilterValueMixin(object):
