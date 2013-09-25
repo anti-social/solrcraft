@@ -4,6 +4,10 @@ from .util import LocalParams, X, make_fq
 from .compat import force_unicode
 
 
+def clone_all(values):
+    return [v.clone() for v in values]
+
+
 class SolrResults(object):
     def __init__(self, query, raw_results):
         self.query = query
@@ -11,13 +15,13 @@ class SolrResults(object):
         self.raw_results = raw_results
         self.ndocs = self.hits = self.raw_results.hits
         self.docs = []
-        self.facet_fields = self.query._facet_fields
-        self.facet_queries = self.query._facet_queries
-        self.facet_dates = self.query._facet_dates
-        self.facet_ranges = self.query._facet_ranges
-        self.facet_pivots = self.query._facet_pivots
-        self.stats_fields = self.query._stats_fields
-        self.groupeds = self.query._groupeds
+        self.facet_fields = clone_all(self.query._facet_fields)
+        self.facet_queries = clone_all(self.query._facet_queries)
+        self.facet_dates = clone_all(self.query._facet_dates)
+        self.facet_ranges = clone_all(self.query._facet_ranges)
+        self.facet_pivots = clone_all(self.query._facet_pivots)
+        self.stats_fields = clone_all(self.query._stats_fields)
+        self.groupeds = clone_all(self.query._groupeds)
 
         for facet in chain(self.facet_fields, self.facet_queries,
                            self.facet_dates, self.facet_ranges,

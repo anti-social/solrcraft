@@ -48,6 +48,11 @@ class Stats(StatsMixin):
                 facet = StatsFacet(facet_field)
             self.facets.append(facet)
 
+    def clone(self):
+        facet_fields = [(stats_facet.field, stats_facet._instance_mapper)
+                        for stats_facet in self.facets]
+        return self.__class__(self.field, facet_fields=facet_fields)
+            
     def get_params(self):
         params = {}
         params['stats.field'] = [self.field]

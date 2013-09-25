@@ -82,6 +82,13 @@ class GroupedField(Grouped):
         super(GroupedField, self).__init__(
             self.field, group_cls, document_cls, type=type, **kwargs)
 
+    def clone(self):
+        return self.__class__(
+            self.key, self.group_cls, self.document_cls,
+            type=self.type, instance_mapper=self._instance_mapper,
+            **self.grouped_params
+        )
+
     def get_params(self):
         params = super(GroupedField, self).get_params()
         # Solr does not support params for specific group field
@@ -110,6 +117,12 @@ class GroupedQuery(Grouped):
         super(GroupedQuery, self).__init__(
             make_fq(fq), group_cls, document_cls, **kwargs)
 
+    def clone(self):
+        return self.__class__(
+            self.fq, self.group_cls, self.document_cls,
+            **self.grouped_params
+        )
+
 
 class GroupedFunc(Grouped):
     param_name = 'func'
@@ -119,6 +132,11 @@ class GroupedFunc(Grouped):
         super(GroupedFunc, self).__init__(
             str(func), group_cls, document_cls, **kwargs)
 
+    def clone(self):
+        return self.__class__(
+            self.func, self.group_cls, self.document_cls,
+            **self.grouped_params
+        )
 
 class Group(object):
     def __init__(self, value, ndocs, start, grouped=None):

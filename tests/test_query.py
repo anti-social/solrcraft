@@ -287,6 +287,66 @@ class QueryTest(TestCase):
             check_docs(iter(q), canonical_docs)
             self.assertEqual(send_request.call_count, 1)
 
+    def test_query_cloning(self):
+        q = self.searcher.search()
+        q = q.qf([('name', 5)])
+        self.assertIn('qf=name^5', str(q))
+
+        q2 = q.field_weight('description')
+        self.assertIn('qf=name^5 description^1', str(q2))
+
+        q = q.qf([('name', 5)])
+        self.assertNotIn('qf=name^5 description^1', str(q))
+
+        with self.patch_send_request() as send_request:
+            send_request.return_value = '''
+{
+  "response": {
+    "numFound": 20,
+    "start": 0,
+    "docs": []
+  },
+  "facet_counts": {
+    "facet_fields": {
+      "category": [
+        "1",
+        20
+      ]
+    }
+  }
+}
+'''
+            q = self.searcher.search()
+            q = q.facet_field('category')
+            q2 = q.clone()
+
+            raw_query = str(q)
+
+            self.assertIn('facet=true', raw_query)
+            self.assertIn('facet.field=category', raw_query)
+
+            r = q.results
+
+            cat_facet = r.get_facet_field('category')
+            self.assertEqual(len(cat_facet.values), 1)
+
+            with self.patch_send_request() as send_request:
+                send_request.return_value = '''
+{
+  "response": {
+    "numFound": 0,
+    "start": 0,
+    "docs": []
+  },
+  "facet_counts": {
+    "facet_fields": {}
+  }
+}
+'''
+                r = q2.results
+
+                cat_facet = r.get_facet_field('category')
+                self.assertEqual(len(cat_facet.values), 0)
 
     def test_facet_field(self):
         with self.patch_send_request() as send_request:

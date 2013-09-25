@@ -30,14 +30,13 @@ class FacetField(object):
         self.values = []
         self._instance_mapper = instance_mapper
 
-    def __deepcopy__(self, memodict):
-        # Fix for http://bugs.python.org/issue1515
-        # self._instance_mapper can be instance method
-        obj = type(self)(self.field, local_params=self.local_params,
-                         instance_mapper=self._instance_mapper,
-                         type=self.type, **self.facet_params)
-        return obj
-
+    def clone(self):
+        return self.__class__(
+            self.field, local_params=self.local_params,
+            instance_mapper=self._instance_mapper, type=self.type,
+            **self.facet_params
+        )
+        
     def instance_mapper(self, ids):
         if self._instance_mapper:
             return self._instance_mapper(ids)
@@ -53,8 +52,8 @@ class FacetField(object):
 
     def process_data(self, results):
         self.values = []
-        raw_facet_fields = results.raw_results.facets['facet_fields']
-        facet_data = raw_facet_fields[self.key]
+        raw_facet_fields = results.raw_results.facets.get('facet_fields', {})
+        facet_data = raw_facet_fields.get(self.key, [])
         for val, count in zip_counts(facet_data, 2):
             self.values.append(
                 FacetValue(self.to_python(val), count, facet=self))
@@ -97,6 +96,13 @@ class FacetRange(object):
         self.facet_params = facet_params
         self.values = []
 
+    def clone(self):
+        return self.__class__(
+            self.field, self.orig_start, self.orig_end, self.orig_gap,
+            local_params=self.local_params, type=self.type,
+            **self.facet_params
+        )
+        
     def get_params(self):
         params = {}
         params['facet'] = True
@@ -145,6 +151,9 @@ class FacetQuery(object):
                                          make_fq(self.fq, self.local_params))
         self.count = None
 
+    def clone(self):
+        return self.__class__(self.fq, local_params=self.local_params)
+        
     def get_params(self):
         params = {}
         params['facet'] = True
@@ -182,6 +191,17 @@ class FacetPivot(object):
         self.key = self.local_params.get('key', self.name)
         self.values = []
 
+    def clone(self):
+        fields_data = []
+        for field in self.fields:
+            fields_data.append((field, dict(_instance_mapper=self.instance_mappers[field],
+                                            _type=self.types[field],
+                                            **self.facet_params[field])))
+        return self.__class__(
+            *fields_data,
+            **dict(local_params=self.local_params)
+        )
+        
     def get_params(self):
         params = {}
         params['facet'] = True
