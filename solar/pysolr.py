@@ -803,9 +803,8 @@ class Solr(object):
                 # To avoid multiple code-paths we'd like to treat all of our values as iterables:
                 if isinstance(value, (list, tuple)):
                     values = value
-                elif isinstance(value, dict):
-                    pass
-                values = (value, )
+                else:
+                    values = (value, )
 
                 for bit in values:
                     if self._is_null_value(bit):
