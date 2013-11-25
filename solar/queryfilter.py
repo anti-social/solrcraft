@@ -1,15 +1,21 @@
 from __future__ import unicode_literals
 
+import math
+import weakref
 from copy import deepcopy
 from itertools import starmap
+from collections import defaultdict
 
-from .util import X, LocalParams, make_fq, process_value, _pop_from_kwargs
-from .types import instantiate, get_to_python, Boolean
-from .compat import force_unicode
+from . import types as solrtypes
+from .util import X, LocalParams, make_fq, process_value, wrap_list, _pop_from_kwargs
+from .compat import PY2, force_unicode, zip_longest
 
 
-DEFAULT_OP_SEP = '__'
-DEFAULT_VAL_SEP = ':'
+def exact_op(f, v):
+    if v is None:
+        return X(**{'{}__isnull'.format(f): True})
+    else:
+        return X(**{'{}__exact'.format(f): v})
 
 def between_op(f, v):
     v1, v2 = v.split(DEFAULT_VAL_SEP)
@@ -25,62 +31,170 @@ def isnull_op(f, v):
 
 
 OPERATORS = {
-    'exact': lambda f, v: X(**{'{}__exact'.format(f): v}),
+    'exact': exact_op,
     'gte': lambda f, v: X(**{'{}__gte'.format(f): v}),
     'gt': lambda f, v: X(**{'{}__gt'.format(f): v}),
     'lte': lambda f, v: X(**{'{}__lte'.format(f): v}),
     'lt': lambda f, v: X(**{'{}__lt'.format(f): v}),
     'between': between_op,
     'isnull': isnull_op,
+}
+
+
+def to_float_factory(type):
+    def to_float(value):
+        v = type.to_python(value)
+        if math.isnan(v) or math.isinf(v):
+            raise ValueError('NaN or Inf is not supported')
+        return v
+    return to_float
+
+
+class BaseCodec(object):
+    def decode_value(self, value, typelist=None):
+        raise NotImplementedError()
+
+    def decode(self, params, types=None):
+        raise NotImplementedError()
+
+    def encode_value(self, value, typelist=None):
+        raise NotImplementedError()
+
+    def encode(self, values, types=None):
+        raise NotImplementedError()
+
+
+class SimpleCodec(BaseCodec):
+    DEFAULT_OPERATOR = 'exact'
+    DEFAULT_OP_SEP = '__'
+    DEFAULT_VAL_SEP = ':'
+
+    PROCESSOR_FACTORIES = {
+        solrtypes.Float: to_float_factory,
     }
+
+    def _normalize_params(self, params):
+        if hasattr(params, 'getall'):
+            # Webob
+            return params.dict_of_lists()
+        if hasattr(params, 'getlist'):
+            # Django
+            return dict(params.lists())
+        if isinstance(params, (list, tuple)):
+            # list, tuple
+            new_params = defaultdict(list)
+            for p, v in params:
+                new_params[p].extend(v)
+            return new_params
+        if isinstance(params, dict):
+            # dict
+            return params
+
+        raise TypeError("'params' must be Webob MultiDict, "
+                        "Django QueryDict, list, tuple or dict")
+
+    def decode_value(self, value, typelist=None):
+        typelist = [solrtypes.instantiate(t) for t in wrap_list(typelist or [])]
+        raw_values = force_unicode(value).split(self.DEFAULT_VAL_SEP)
+        decoded_values = []
+        for v, type in zip_longest(raw_values, typelist):
+            if type is None:
+                to_python = force_unicode
+            else:
+                to_python_factory = self.PROCESSOR_FACTORIES.get(type.__class__)
+                if to_python_factory:
+                    to_python = to_python_factory(type)
+                else:
+                    to_python = type.to_python
+            if v is None:
+                continue
+            try:
+                # null is special value
+                if v == 'null':
+                    decoded_values.append(None)
+                else:
+                    decoded_values.append(to_python(v))
+            except ValueError:
+                pass
+        return decoded_values
+        
+    
+    def decode(self, params, types=None):
+        """Returns {name: [(operator1, [value1]), (operator2, [value21, value22])], ...}"""
+        params = self._normalize_params(params)
+        types = types or {}
+        data = defaultdict(list)
+        # sort is needed to pass tests
+        for p, v in sorted(starmap(lambda p, v: (force_unicode(p), v), params.items())):
+            ops = p.split(self.DEFAULT_OP_SEP)
+            name = ops[0]
+            if len(ops) == 1:
+                op = self.DEFAULT_OPERATOR
+            else:
+                op = self.DEFAULT_OP_SEP.join(ops[1:])
+
+            for w in wrap_list(v):
+                decoded_values = self.decode_value(w, types.get(name))
+                if decoded_values:
+                    data[name].append((op, decoded_values))
+
+        return dict(data)
+
+    def _encode_value(self, value):
+        if value is None:
+            return 'null'
+        if value is True:
+            return 'true'
+        if value is False:
+            return 'false'
+        return force_unicode(value)
+        
+    def encode_value(self, value, typelist=None):
+        return self.DEFAULT_VAL_SEP.join(self._encode_value(v) for v in wrap_list(value))
+
+    def encode(self, values, types=None):
+        params = defaultdict(list)
+        for name, value in values:
+            params[name].append(self.encode_value(value))
+        return dict(params)
 
 
 class QueryFilter(object):
-    def __init__(self, *filters):
+    def __init__(self, *filters, **kwargs):
         self.filters = []
-        self.filter_names = []
         self.ordering_filter = None
-        self.params = None
-        self.results = None
         for f in filters:
             self.add_filter(f)
 
-    def _convert_params(self, params):
-        if hasattr(params, 'getall'):
-            # Webob
-            new_params = params.dict_of_lists()
-        elif hasattr(params, 'getlist'):
-            # Django
-            new_params = dict(params.lists())
-        elif isinstance(params, (list, tuple)):
-            # list, tuple
-            new_params = dict(params)
-        elif isinstance(params, dict):
-            # dict
-            new_params = deepcopy(params)
-        else:
-            raise ValueError("'params' must be Webob MultiDict, "
-                             "Django QueryDict, list, tuple or dict")
-        return new_params
+        self.codec = kwargs.get('codec') or SimpleCodec()
+        self._params = []
+        self._results = None
 
+    def get_filter_types(self):
+        types = {}
+        for filter in self.filters:
+            types[filter.name] = filter.get_types()
+        return types
+            
     def apply(self, query, params, exclude=None):
-        self.params = self._convert_params(params)
+        types = self.get_filter_types()
+        self._params = self.codec.decode(params, types)
         for filter in self.filters:
             if exclude is None or filter.name not in exclude:
-                query = filter.apply(query, self.params)
+                query = filter.apply(query, self._params.get(filter.name, []))
 
         if self.ordering_filter:
-            query = self.ordering_filter.apply(query, self.params)
+            query = self.ordering_filter.apply(
+                query, self._params.get(self.ordering_filter.name, [])
+            )
 
         return query
 
     def add_filter(self, filter):
         if not isinstance(filter, BaseFilter):
             filter = Filter(filter)
-        # if filter.name in self.filter_names:
-        #     return
+        filter._qf = weakref.proxy(self)
         self.filters.append(filter)
-        self.filter_names.append(filter.name)
 
     def get_filter(self, name):
         for f in self.filters:
@@ -91,49 +205,28 @@ class QueryFilter(object):
         self.ordering_filter = ordering_filter
 
     def process_results(self, results):
-        self.results = results
+        self._results = results
         for f in self.filters:
-            f.process_results(self.results, self.params)
+            f.process_results(self._results, self._params.get(f.name, []))
 
 
 class BaseFilter(object):
-    available_operators = None
+    allowed_operators = None
 
     def __init__(self, name, type=None):
         self.name = name
-        self.type = instantiate(type)
-        self.to_python = (
-            self.type.process_param_value
-            if hasattr(self.type, 'process_param_value') else
-            (lambda v: v)
-        )
+        self.type = solrtypes.instantiate(type)
+        self._qf = None
 
-    def _filter_and_split_params(self, params):
-        """Returns [(operator1, value1), (operator2, value2)]"""
-        items = []
-        for p, v in sorted(starmap(lambda p, v: (force_unicode(p), v), params.items())):
-            ops = p.split(DEFAULT_OP_SEP)
-            name = ops[0]
-            if len(ops) == 1:
-                op = 'exact'
-            else:
-                op = DEFAULT_OP_SEP.join(ops[1:])
+    def _filter_values(self, params):
+        values = []
+        for op, vals in params:
+            if not self.allowed_operators or op in self.allowed_operators:
+                values += vals
+        return values
 
-            if (
-                self.available_operators is not None
-                and op not in self.available_operators
-            ):
-                continue
-
-            if name == self.name:
-                if not isinstance(v, (list, tuple)):
-                    v = [v]
-                for w in v:
-                    try:
-                        w = self.to_python(w)
-                    except ValueError:
-                        continue
-                    yield op, w
+    def get_types(self):
+        return [self.type]
 
     def process_results(self, results, params):
         raise NotImplementedError()
@@ -145,12 +238,12 @@ class Filter(BaseFilter):
     def __init__(self, name, field=None, type=None, local_params=None,
                  select_multiple=True, default=None, **kwargs):
         super(Filter, self).__init__(name, type=type)
-        self.field = field or self.name
+        self.field = field or name
         self.local_params = LocalParams(
             kwargs.pop('_local_params', local_params))
         self.select_multiple = select_multiple
         self.default = default
-    
+
     def _filter_query(self, query, fqs):
         if not fqs:
             return query
@@ -188,8 +281,9 @@ class Filter(BaseFilter):
         
     def apply(self, query, params):
         fqs = []
-        for op, v in self._filter_and_split_params(params):
-            fqs.append(self._make_x(op, v))
+        for op, v in params:
+            if not self.allowed_operators or op in self.allowed_operators:
+                fqs.append(self._make_x(op, v[0]))
         if not fqs and self.default:
             fqs.append(self._make_x('exact', self.default))
         return self._filter_query(query, fqs)
@@ -215,16 +309,16 @@ class FacetFilterValueMixin(object):
         return self.filter.name
 
     @property
+    def filter_value(self):
+        return self.filter._qf.codec.encode_value(self.value)
+
+    @property
     def select_multiple(self):
         return self.filter.select_multiple
         
     @property
     def value(self):
         return self.facet_value.value
-
-    @property
-    def param_value(self):
-        return process_value(self.value, safe=True)
 
     @property
     def count(self):
@@ -255,13 +349,13 @@ class FacetFilterValue(FacetFilterValueMixin):
 
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
-    available_operators = ['exact']
+    available_operators = ('exact',)
     
     def __init__(self, name, field=None, filter_value_cls=None, type=None,
                  local_params=None, instance_mapper=None,
                  select_multiple=True, **kwargs):
         super(FacetFilter, self).__init__(name, field, type=type,
-                                          select_multiple=select_multiple)
+                                          select_multiple=select_multiple, **kwargs)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(
             kwargs.pop('_local_params', local_params))
@@ -303,11 +397,11 @@ class FacetFilter(Filter):
         self.values = []
         self.all_values = []
         self.selected_values = []
-        selected_values = set(self.to_python(v) for v in params.get(self.name, []))
+        param_values = self._filter_values(params)
         facet = results.get_facet_field(self.name)
         if facet:
             for fv in facet.values:
-                selected = fv.value in selected_values
+                selected = fv.value in param_values
                 self.add_value(self.filter_value_cls(self, fv, selected))
 
 
@@ -328,7 +422,7 @@ class FacetPivotFilterValueMixin(object):
 class FacetPivotFilterValue(FacetFilterValueMixin, FacetPivotFilterValueMixin):
     def __init__(self, filter, facet_values, selected, title=None,
                  **kwargs):
-        self.filter = filter
+        self.filter = weakref.proxy(filter)
         self.facet_values = facet_values
         self.facet_value = facet_values[-1]
         self.selected = selected
@@ -337,12 +431,13 @@ class FacetPivotFilterValue(FacetFilterValueMixin, FacetPivotFilterValueMixin):
         self.pivot = None
 
     @property
-    def param_value(self):
-        return DEFAULT_VAL_SEP.join(process_value(fv.value, safe=True) for fv in self.facet_values)
-
-    @property
     def filter_name(self):
         return self.filter._pivot_filter.name
+
+    @property
+    def filter_value(self):
+        values = [fv.value for fv in self.facet_values]
+        return self.filter._pivot_filter._qf.codec.encode_value(values)
 
 
 class FacetPivotFilter(FacetFilter):
@@ -361,8 +456,7 @@ class FacetPivotFilter(FacetFilter):
             type=self.type, _pivot_filter=pivot_filter, **self.kwargs)
         
     def process_facet(self, facet, pivot_filters, selected_values, facet_values):
-        cur_selected_values = set(self.to_python(v[0]) for v in selected_values)
-
+        cur_selected_values = set(v[0] for v in selected_values)
         for fv in facet.values:
             selected = fv.value in cur_selected_values
             filter_value = self.filter_value_cls(
@@ -379,7 +473,7 @@ class FacetPivotFilter(FacetFilter):
                 
 
 class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
-    available_operators = ['exact']
+    allowed_operators = ('exact',)
     fq_connector = X.OR
 
     def __init__(self, name, *pivots, **kwargs):
@@ -397,6 +491,9 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         self.local_params = LocalParams(_pop_from_kwargs(kwargs, 'local_params'))
         self.pivot = self._pivots[0].bind(self)
 
+    def get_types(self):
+        return [p.type for p in self._pivots]
+
     def apply(self, query, params):
         local_params = LocalParams(self.local_params)
         local_params['key'] = self.name
@@ -405,12 +502,13 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
             *zip(self._pivot_fields, self._pivot_kwargs),
             _local_params=local_params)
         fqs = []
-        for op, value in self._filter_and_split_params(params):
-            value = force_unicode(value)
+        for op, values in params:
+            if op not in self.allowed_operators:
+                continue
             op_func = OPERATORS.get(op)
             if op_func:
                 x = X()
-                for field, v in zip(self._pivot_fields, value.split(DEFAULT_VAL_SEP)):
+                for field, v in zip(self._pivot_fields, values):
                     x = x & op_func(field, v)
                 fqs.append(x)
         local_params = LocalParams()
@@ -420,8 +518,10 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         return query
 
     def process_results(self, results, params):
-        selected_values = [force_unicode(v).split(DEFAULT_VAL_SEP)
-                           for v in params.get(self.name, [])]
+        selected_values = []
+        for op, vals in params:
+            if op in self.allowed_operators:
+                selected_values.append(vals)
         self.pivot.process_facet(
             results.get_facet_pivot(self.name),
             self._pivots[1:],
@@ -447,6 +547,10 @@ class FacetQueryFilterValue(object):
     @property
     def _key(self):
         return '{}__{}'.format(self.filter_name, self.value)
+
+    @property
+    def filter_value(self):
+        return self.value
 
     @property
     def count(self):
@@ -495,12 +599,16 @@ class FacetQueryFilter(Filter):
         return query
 
     def process_results(self, results, params):
+        selected_values = set()
+        for op, vals in params:
+            if op == 'exact':
+                selected_values.update(vals)
         was_selected = False
         for filter_value in self.filter_values:
             for facet_query in results.facet_queries:
                 if facet_query.local_params.get('key') == filter_value._key:
                     filter_value.facet_query = facet_query
-                    if filter_value.value in params.get(self.name, []):
+                    if filter_value.value in selected_values:
                         filter_value.selected = True
                         was_selected = True
         if not was_selected and self.default:
@@ -509,7 +617,7 @@ class FacetQueryFilter(Filter):
 
 class RangeFilter(Filter):
     fq_connector = X.AND
-    available_operators = ['gte', 'lte']
+    allowed_operators = ['gte', 'lte']
 
     def __init__(self, name, field=None, type=None,
                  gather_stats=False, exclude_filter=True, **kwargs):
@@ -523,11 +631,11 @@ class RangeFilter(Filter):
         self.max = None
 
     def apply(self, query, params):
-        for op, v in self._filter_and_split_params(params):
+        for op, v in params:
             if op == 'gte':
-                self.from_value = v
+                self.from_value = v[0]
             if op == 'lte':
-                self.to_value = v
+                self.to_value = v[0]
 
         query = super(RangeFilter, self).apply(query, params)
         if self.gather_stats and not self.exclude_filter:
@@ -585,6 +693,8 @@ class OrderingValue(object):
         
 
 class OrderingFilter(BaseFilter):
+    allowed_operators = ('exact',)
+
     def __init__(self, name, *args, **kwargs):
         self.name = name
         self.values = args
@@ -603,15 +713,13 @@ class OrderingFilter(BaseFilter):
         
     def apply(self, query, params):
         ordering_value = None
-        valuelist = params.get(self.name, [])
-        if not isinstance(valuelist, (list, tuple)):
-            valuelist = [valuelist]
+        valuelist = self._filter_values(params)
 
         if valuelist:
             ordering_value = self.get_value(valuelist[0])
 
         if not ordering_value:
             ordering_value = self.default_value
-        
+
         ordering_value.selected = True
         return ordering_value.apply(query, params)

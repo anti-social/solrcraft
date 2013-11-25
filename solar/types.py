@@ -1,6 +1,5 @@
 from __future__ import unicode_literals
 
-import math
 import inspect
 import datetime
 
@@ -24,36 +23,37 @@ class Type(object):
     def to_python(self, value):
         raise NotImplementedError()
 
-    def process_result_value(self, value):
-        return self.to_python(value)
-
-    def process_param_value(self, value):
-        return self.to_python(value)
-
 
 class String(Type):
     def to_python(self, value):
+        if value is None:
+            return None
         return force_unicode(value)
 
 
 class Integer(Type):
     def to_python(self, value):
+        if value is None:
+            return None
         return int(value)
 
 
 class Float(Type):
+    def __init__(self, precision=None):
+        self.precision = precision
+        
     def to_python(self, value):
+        if value is None:
+            return None
+        if self.precision is not None:
+            return round(float(value), self.precision)
         return float(value)
-
-    def process_param_value(self, value):
-        v = float(value)
-        if math.isnan(v) or math.isinf(v):
-            raise ValueError('NaN or Inf is not supported')
-        return v
 
 
 class Boolean(Type):
     def to_python(self, value):
+        if value is None:
+            return None
         if value is True or value == 'true':
             return True
         elif value is False or value == 'false':
@@ -63,6 +63,8 @@ class Boolean(Type):
 
 class DateTime(Type):
     def to_python(self, value):
+        if value is None:
+            return None
         m = DATETIME_REGEX.match(value)
         if not m:
             raise ValueError("Cannot convert {!r} to datetime".format(value))
@@ -71,4 +73,6 @@ class DateTime(Type):
 
 class Text(Type):
     def to_python(self, value):
+        if value is None:
+            return None
         return force_unicode(value)

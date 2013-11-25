@@ -15,6 +15,10 @@ else:
     unichr = unichr
     int_types = (int, long)
 
+if PY2:
+    from itertools import izip_longest as zip_longest
+else:
+    from itertools import zip_longest
 
 if PY2:
     def implements_to_string(cls):

@@ -202,13 +202,13 @@ class QueryTest(TestCase):
             ["{!cache=false cost=50}price:{500 TO 1000}"])
         self.assertSequenceEqual(
             q.filter(price=None)._prepare_params()['fq'],
-            ["NOT price:[* TO *]"])
+            ["(*:* NOT price:[* TO *])"])
         self.assertSequenceEqual(
             q.exclude(price=None)._prepare_params()['fq'],
-            ["NOT (NOT price:[* TO *])"])
+            ["NOT ((*:* NOT price:[* TO *]))"])
         self.assertSequenceEqual(
             q.filter(price__isnull=True)._prepare_params()['fq'],
-            ["NOT price:[* TO *]"])
+            ["(*:* NOT price:[* TO *])"])
         self.assertSequenceEqual(
             q.filter(X(genre='Comedy') & ~X(genre='Drama'))._prepare_params()['fq'],
             ["(genre:Comedy AND NOT (genre:Drama))"])

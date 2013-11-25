@@ -273,14 +273,14 @@ def process_field(field, op, value):
             return '({0}:[* TO *] AND NOT {0}:[* TO *])'.format(field)
     elif op == 'isnull':
         if value:
-            return 'NOT {}:[* TO *]'.format(field)
+            return '(*:* NOT {}:[* TO *])'.format(field)
         else:
             return '{}:[* TO *]'.format(field)
     elif op == 'startswith':
         return '{}:{}'.format(
             field, maybe_wrap_parentheses('{}*'.format(process_value(value))))
     elif value is None:
-        return 'NOT {}:[* TO *]'.format(field)
+        return '(*:* NOT {}:[* TO *])'.format(field)
     return '{}:{}'.format(field, maybe_wrap_parentheses(process_value(value)))
 
 def fq_from_tuple(x):
@@ -340,3 +340,8 @@ def _pop_from_kwargs(kwargs, key):
     if '_{}'.format(key) in kwargs:
         return kwargs.pop('_{}'.format(key))
     return kwargs.pop(key, None)
+
+def wrap_list(v):
+    if not isinstance(v, (list, tuple)):
+        return [v]
+    return v
