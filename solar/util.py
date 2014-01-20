@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 import re
 import math
 import urllib
+import decimal
 import logging
 from copy import deepcopy
 from datetime import datetime, date
@@ -222,6 +223,8 @@ def process_value(v, safe=False):
                 return 'Infinity'
             else:
                 return '-Infinity'
+        return force_unicode(v)
+    if isinstance(v, decimal.Decimal):
         return force_unicode(v)
     if isinstance(v, LocalParams):
         return '"{}"'.format(force_unicode(v))
