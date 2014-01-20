@@ -783,6 +783,8 @@ class Solr(object):
             else:
                 values = (value, )
             for bit in values:
+                if self._is_null_value(bit):
+                    continue
                 field = ET.Element('field', **attrs)
                 field.text = self._from_python(bit)
                 doc_elem.append(field)
