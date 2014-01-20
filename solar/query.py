@@ -214,12 +214,12 @@ class SolrQuery(object):
     def clone(self):
         pass
 
-    def _add_component(self, name, **kwargs):
-        self._params[name] = True
+    def _add_component(self, name, _activate=True, **kwargs):
+        if _activate:
+            self._params[name] = True
         for p, v in kwargs.items():
             p = p.replace('_', '.')
-            if v is not None:
-                self._params['{}.{}'.format(name, p)] = v
+            self._params['{}.{}'.format(name, p)] = v
         
     def _remove_component(self, name):
         for key in list(self._params.keys()):
@@ -436,7 +436,10 @@ class SolrQuery(object):
             self._remove_component('group')
             self._groupeds = []
         else:
-            self._add_component('group', **group_params)
+            # do not activate group component
+            # Solr fails when field, query or function are not specified
+            # Grouped object activates group component when we prepare params
+            self._add_component('group', _activate=False, **group_params)
             for field in fields:
                 self = self.group_field(field)
             return self
