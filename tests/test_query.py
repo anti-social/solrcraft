@@ -100,7 +100,7 @@ class QueryTest(TestCase):
         # Facets
         q = (
             SolrSearcher().search()
-            .facet('category', 'model', mincount=5)
+            .facet('category', 'model', mincount=5, limit=100)
             .facet_field('manufacturer', limit=10)
             .facet_query(X(is_active=True))
             .facet_range('price_unit', start=0, end=1000, gap=100,
@@ -109,6 +109,7 @@ class QueryTest(TestCase):
         raw_query = str(q)
         self.assertIn('facet=true', raw_query)
         self.assertIn('facet.mincount=5', raw_query)
+        self.assertIn('facet.limit=100', raw_query)
         self.assertIn('facet.field=category', raw_query)
         self.assertIn('facet.field=model', raw_query)
         self.assertIn('facet.field=manufacturer', raw_query)
@@ -118,6 +119,13 @@ class QueryTest(TestCase):
         self.assertIn('f.price_unit.facet.range.start=0', raw_query)
         self.assertIn('f.price_unit.facet.range.end=1000', raw_query)
         self.assertIn('f.price_unit.facet.range.gap=100', raw_query)
+
+        q = q.facet(mincount=None)
+        raw_query = str(q)
+        self.assertIn('facet=true', raw_query)
+        self.assertIn('facet.limit=100', raw_query)
+        self.assertNotIn('facet.mincount=5', raw_query)
+
         q = q.facet(None)
         raw_query = str(q)
         self.assertNotIn('facet=true', raw_query)
