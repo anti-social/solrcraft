@@ -32,6 +32,19 @@ class String(Type):
 
 
 class Integer(Type):
+    MIN_VALUE = -(1 << 31)
+    MAX_VALUE = (1 << 31) - 1
+
+    def to_python(self, value):
+        if value is None:
+            return None
+        return int(value)
+
+
+class Long(Type):
+    MIN_VALUE = -(1 << 63)
+    MAX_VALUE = (1 << 63) - 1
+
     def to_python(self, value):
         if value is None:
             return None

@@ -126,7 +126,6 @@ class QueryFilterTest(TestCase):
         "5", 10,
         "2", 5,
         "1", 2,
-        "13", 1,
         null, 4
       ],
       "region": [
@@ -147,6 +146,7 @@ class QueryFilterTest(TestCase):
                 CategoryFilter(
                     'cat', 'category', mincount=1,
                     type=Integer,
+                    ensure_selected_values=True,
                     _local_params={'cache': False, 'ex': ('test',)}))
             qf.add_filter(FacetFilter('region', missing=True))
 
@@ -197,11 +197,16 @@ class QueryFilterTest(TestCase):
             self.assertEqual(category_filter.all_values[3].count, 2)
             self.assertEqual(category_filter.all_values[3].count_plus, '+2')
             self.assertEqual(category_filter.all_values[3].selected, False)
-            self.assertEqual(category_filter.all_values[4].value, 13)
-            self.assertEqual(category_filter.all_values[4].filter_value, '13')
-            self.assertEqual(category_filter.all_values[4].count, 1)
-            self.assertEqual(category_filter.all_values[4].count_plus, '1')
+            self.assertEqual(category_filter.all_values[4].value, None)
+            self.assertEqual(category_filter.all_values[4].filter_value, 'null')
+            self.assertEqual(category_filter.all_values[4].count, 4)
+            self.assertEqual(category_filter.all_values[4].count_plus, '4')
             self.assertEqual(category_filter.all_values[4].selected, True)
+            self.assertEqual(category_filter.all_values[5].value, 13)
+            self.assertEqual(category_filter.all_values[5].filter_value, '13')
+            self.assertEqual(category_filter.all_values[5].count, None)
+            self.assertEqual(category_filter.all_values[5].count_plus, '')
+            self.assertEqual(category_filter.all_values[5].selected, True)
 
             region_filter = qf.get_filter('region')
             self.assertEqual(len(region_filter.all_values), 3)
@@ -446,12 +451,14 @@ class QueryFilterTest(TestCase):
             qf.add_filter(
                 PivotFilter(
                     'manu',
-                    FacetPivotFilter('manufacturer', mincount=1),
+                    FacetPivotFilter('manufacturer', mincount=1, ensure_selected_values=True),
                     FacetPivotFilter('model', _instance_mapper=_obj_mapper, limit=5),
-                    FacetPivotFilter('discount', type=Boolean, missing=True)))
+                    FacetPivotFilter('discount', type=Boolean, missing=True)
+                )
+            )
 
             params = {
-                'manu': ['samsung:note', 'nokia:n900:false', 'nokia:n900:null', 'nothing:', 10],
+                'manu': ['samsung:note', 'nokia:n900:false', 'nokia:n900:null', 'noname:', 10],
                 'manu__gte': '100',
             }
 
@@ -466,15 +473,15 @@ class QueryFilterTest(TestCase):
                           '((manufacturer:"samsung" AND model:"note") '
                           'OR (manufacturer:"nokia" AND model:"n900" AND discount:"false") '
                           'OR (manufacturer:"nokia" AND model:"n900" AND (*:* NOT discount:[* TO *])) '
-                          'OR (manufacturer:"nothing" AND model:"") '
+                          'OR (manufacturer:"noname" AND model:"") '
                           'OR manufacturer:"10")',
                           raw_query)
 
             qf.process_results(q.results)
 
             manu_filter = qf.get_filter('manu')
-            self.assertEqual(len(manu_filter.all_values), 3)
-            self.assertEqual(len(manu_filter.selected_values), 2)
+            self.assertEqual(len(manu_filter.all_values), 5)
+            self.assertEqual(len(manu_filter.selected_values), 4)
             self.assertEqual(len(manu_filter.values), 1)
             self.assertEqual(manu_filter.all_values[0].filter_name, 'manu')
             self.assertEqual(manu_filter.all_values[0].value, 'samsung')
@@ -530,12 +537,18 @@ class QueryFilterTest(TestCase):
             self.assertEqual(manu_filter.all_values[1].pivot.all_values[0].selected, True)
             self.assertEqual(len(manu_filter.all_values[1].pivot.all_values[0].pivot.all_values), 1)
             self.assertEqual(manu_filter.all_values[1].pivot.all_values[0].pivot.all_values[0].value, False)
+            self.assertEqual(manu_filter.all_values[1].pivot.all_values[0].pivot.all_values[0].filter_value, 'nokia:n900:false')
             self.assertEqual(manu_filter.all_values[1].pivot.all_values[0].pivot.all_values[0].count, 1)
+            self.assertEqual(manu_filter.all_values[1].pivot.all_values[0].pivot.all_values[0].count_plus, '1')
             self.assertEqual(manu_filter.all_values[1].pivot.all_values[0].pivot.all_values[0].selected, True)
             self.assertEqual(manu_filter.all_values[2].value, 'lenovo')
             self.assertEqual(manu_filter.all_values[2].filter_value, 'lenovo')
             self.assertEqual(manu_filter.all_values[2].count, 5)
             self.assertEqual(manu_filter.all_values[2].selected, False)
+            self.assertEqual(manu_filter.all_values[3].value, 'noname')
+            self.assertEqual(manu_filter.all_values[3].filter_value, 'noname')
+            self.assertEqual(manu_filter.all_values[3].count, None)
+            self.assertEqual(manu_filter.all_values[3].selected, True)
 
     def test_range_filter(self):
         with self.patch_send_request() as send_request:

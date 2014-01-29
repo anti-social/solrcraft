@@ -4,10 +4,12 @@ import math
 import weakref
 from copy import deepcopy
 from itertools import starmap
+from functools import partial
 from collections import defaultdict
 
-from . import types as solrtypes
 from .util import X, LocalParams, make_fq, process_value, wrap_list, _pop_from_kwargs
+from .types import instantiate, Integer, Long, Float 
+from .facets import FacetValue
 from .compat import PY2, force_unicode, zip_longest
 
 
@@ -16,11 +18,6 @@ def exact_op(f, v):
         return X(**{'{}__isnull'.format(f): True})
     else:
         return X(**{'{}__exact'.format(f): v})
-
-def between_op(f, v):
-    v1, v2 = v.split(DEFAULT_VAL_SEP)
-    return X(**{'{}__between'.format(f): (v1, v2)})
-
 
 def isnull_op(f, v):
     if v == '1':
@@ -36,19 +33,41 @@ OPERATORS = {
     'gt': lambda f, v: X(**{'{}__gt'.format(f): v}),
     'lte': lambda f, v: X(**{'{}__lte'.format(f): v}),
     'lt': lambda f, v: X(**{'{}__lt'.format(f): v}),
-    'between': between_op,
     'isnull': isnull_op,
 }
 
 
-def to_float_factory(type):
-    def to_float(value):
-        v = type.to_python(value)
-        if math.isnan(v) or math.isinf(v):
-            raise ValueError('NaN or Inf is not supported')
-        return v
-    return to_float
+def to_float(value, type=None):
+    type = type or Float()
+    v = type.to_python(value)
+    if math.isnan(v) or math.isinf(v):
+        raise ValueError('NaN or Inf is not supported')
+    return v
 
+
+def to_int(value, type=None):
+    type = type or Integer()
+    v = type.to_python(value)
+    if Integer.MIN_VALUE < v < Integer.MAX_VALUE:
+        return v
+    raise ValueError(
+        'Integer value must be between %s and %s' % (
+            Integer.MIN_VALUE, Integer.MAX_VALUE
+        )
+    )
+
+
+def to_long(value, type=None):
+    type = type or Long()
+    v = type.to_python(value)
+    if Long.MIN_VALUE < v < Long.MAX_VALUE:
+        return v
+    raise ValueError(
+        'Long value must be between %s and %s' % (
+            Long.MIN_VALUE, Long.MAX_VALUE
+        )
+    )
+    
 
 class BaseCodec(object):
     def decode_value(self, value, typelist=None):
@@ -70,7 +89,9 @@ class SimpleCodec(BaseCodec):
     DEFAULT_VAL_SEP = ':'
 
     PROCESSOR_FACTORIES = {
-        solrtypes.Float: to_float_factory,
+        Float: lambda type: partial(to_float, type=type),
+        Integer: lambda type: partial(to_int, type=type),
+        Long: lambda type: partial(to_long, type=type),
     }
 
     def _normalize_params(self, params):
@@ -94,7 +115,7 @@ class SimpleCodec(BaseCodec):
                         "Django QueryDict, list, tuple or dict")
 
     def decode_value(self, value, typelist=None):
-        typelist = [solrtypes.instantiate(t) for t in wrap_list(typelist or [])]
+        typelist = [instantiate(t) for t in wrap_list(typelist or [])]
         raw_values = force_unicode(value).split(self.DEFAULT_VAL_SEP)
         decoded_values = []
         for v, type in zip_longest(raw_values, typelist):
@@ -215,7 +236,7 @@ class BaseFilter(object):
 
     def __init__(self, name, type=None):
         self.name = name
-        self.type = solrtypes.instantiate(type)
+        self.type = instantiate(type)
         self._qf = None
 
     def _filter_values(self, params):
@@ -326,6 +347,8 @@ class FacetFilterValueMixin(object):
     
     @property
     def count_plus(self):
+        if not self.count:
+            return ''
         if not self.selected \
            and self.filter.select_multiple \
            and self.filter.selected_values \
@@ -353,13 +376,14 @@ class FacetFilter(Filter):
     
     def __init__(self, name, field=None, filter_value_cls=None, type=None,
                  local_params=None, instance_mapper=None,
-                 select_multiple=True, **kwargs):
+                 select_multiple=True, ensure_selected_values=False, **kwargs):
         super(FacetFilter, self).__init__(name, field, type=type,
                                           select_multiple=select_multiple, **kwargs)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
         self.local_params = LocalParams(
             kwargs.pop('_local_params', local_params))
         self._instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
+        self.ensure_selected_values = ensure_selected_values
         self.kwargs = kwargs
         self.values = []
         self.selected_values = []
@@ -399,10 +423,18 @@ class FacetFilter(Filter):
         self.selected_values = []
         param_values = self._filter_values(params)
         facet = results.get_facet_field(self.name)
+        processed_facet_values = set()
         if facet:
             for fv in facet.values:
                 selected = fv.value in param_values
                 self.add_value(self.filter_value_cls(self, fv, selected))
+                processed_facet_values.add(fv.value)
+        if self.ensure_selected_values:
+            for v in param_values:
+                if v not in processed_facet_values:
+                    fv = FacetValue(v, None, facet)
+                    facet.values.append(fv)
+                    self.add_value(self.filter_value_cls(self, fv, True))
 
 
 class FacetPivotFilterValueMixin(object):
@@ -444,24 +476,28 @@ class FacetPivotFilter(FacetFilter):
     filter_value_cls = FacetPivotFilterValue
 
     def __init__(self, name, field=None, filter_value_cls=None,
-                 type=None, _pivot_filter=None, **kwargs):
+                 type=None, _pivot_filter=None, ensure_selected_values=False,
+                 **kwargs):
         super(FacetPivotFilter, self).__init__(
             name, field=field, filter_value_cls=filter_value_cls,
-            type=type, **kwargs)
+            type=type, ensure_selected_values=ensure_selected_values, **kwargs)
         self._pivot_filter = _pivot_filter
 
     def bind(self, pivot_filter):
         return FacetPivotFilter(
             self.name, field=self.field, filter_value_cls=self.filter_value_cls,
-            type=self.type, _pivot_filter=pivot_filter, **self.kwargs)
-        
+            type=self.type, ensure_selected_values=self.ensure_selected_values,
+            _pivot_filter=pivot_filter, **self.kwargs)
+
     def process_facet(self, facet, pivot_filters, selected_values, facet_values):
-        cur_selected_values = set(v[0] for v in selected_values)
+        param_values = [v[0] for v in selected_values]
+        processed_facet_values = set()
         for fv in facet.values:
-            selected = fv.value in cur_selected_values
+            selected = fv.value in param_values
             filter_value = self.filter_value_cls(
                 self, facet_values + [fv], selected)
             self.add_value(filter_value)
+            processed_facet_values.add(fv.value)
             if fv.pivot:
                 pivot_filter = pivot_filters[0].bind(self._pivot_filter)
                 pivot_filter.process_facet(
@@ -470,6 +506,13 @@ class FacetPivotFilter(FacetFilter):
                     [v[1:] for v in selected_values if len(v) > 1 and fv.value == v[0]],
                     facet_values + [fv])
                 filter_value.pivot = pivot_filter
+        if self.ensure_selected_values:
+            for v in param_values:
+                if v not in processed_facet_values:
+                    fv = FacetValue(v, None, facet)
+                    facet.values.append(fv)
+                    filter_value = self.filter_value_cls(self, facet_values + [fv], True)
+                    self.add_value(filter_value)
                 
 
 class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
