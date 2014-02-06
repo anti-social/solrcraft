@@ -28,8 +28,8 @@ SOLR_DATETIME_RE = re.compile(
 
 SPECIAL_WORDS = ['AND', 'OR', 'NOT', 'TO']
 
-# See: http://lucene.apache.org/core/3_6_0/queryparsersyntax.html#Escaping%20Special%20Characters
-SPECIAL_CHARACTERS =  r'\+-&|!(){}[]^"~*?:'
+# See: http://lucene.apache.org/core/4_0_0/queryparser/org/apache/lucene/queryparser/classic/package-summary.html#Escaping_Special_Characters
+SPECIAL_CHARACTERS =  r'\+-&|!(){}[]^"~*?:/'
 
 
 class SafeString(binary_type):

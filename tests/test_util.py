@@ -14,8 +14,8 @@ class UtilTest(TestCase):
         self.assertEqual(safe_solr_input('SEPARATOR'), 'SEPARATOR')
         self.assertEqual(safe_solr_input(' AND one OR two  OR'), ' and one or two  or')
         self.assertEqual(safe_solr_input('AND OR NOT TO'), 'and or not to')
-        self.assertEqual(safe_solr_input('\\+-&|!(){}[]^"~*?:'),
-                         '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:')
+        self.assertEqual(safe_solr_input('\\+-&|!(){}[]^"~*?:/'),
+                         '\\\\\\+\\-\\&\\|\\!\\(\\)\\{\\}\\[\\]\\^\\"\\~\\*\\?\\:\\/')
     
     def test_X(self):
         self.assertEqual(force_unicode(X(status=0)),
