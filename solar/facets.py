@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
 from copy import deepcopy
+from itertools import chain
 
 from .util import LocalParams, X, make_fq, _pop_from_kwargs
 from .types import instantiate, get_to_python
@@ -19,28 +20,23 @@ def zip_counts(counts, n, over=0):
 
 
 class FacetField(object):
-    def __init__(self, field, local_params=None, instance_mapper=None,
-                 type=None, **facet_params):
+    def __init__(self, field, **facet_params):
         self.field = field
-        self.local_params = LocalParams(local_params)
+        self.local_params = LocalParams(_pop_from_kwargs(facet_params, 'local_params'))
         self.key = self.local_params.get('key', self.field)
-        self.type = instantiate(type)
+        self.type = instantiate(_pop_from_kwargs(facet_params, 'type'))
         self.to_python = get_to_python(self.type)
+        self.instance_mapper = _pop_from_kwargs(facet_params, 'instance_mapper')
+        self.mapper_registry = None
         self.facet_params = facet_params
         self.values = []
-        self._instance_mapper = instance_mapper
 
     def clone(self):
         return self.__class__(
             self.field, local_params=self.local_params,
-            instance_mapper=self._instance_mapper, type=self.type,
+            instance_mapper=self.instance_mapper, type=self.type,
             **self.facet_params
         )
-        
-    def instance_mapper(self, ids):
-        if self._instance_mapper:
-            return self._instance_mapper(ids)
-        return {}
         
     def get_params(self):
         params = {}
@@ -49,6 +45,16 @@ class FacetField(object):
         for p, v in self.facet_params.items():
             params['f.{}.facet.{}'.format(self.field, p)] = v
         return params
+
+    def get_value(self, value):
+        for fv in self.values:
+            if fv.value == value:
+                return fv
+
+    def set_mapper_registry(self, mapper_registry):
+        if self.instance_mapper:
+            mapper_registry.setdefault(self.instance_mapper, []).append(self)
+        self.mapper_registry = mapper_registry
 
     def process_data(self, results):
         self.values = []
@@ -59,15 +65,24 @@ class FacetField(object):
                 FacetValue(self.to_python(val), count, facet=self))
 
     def _populate_instances(self):
-        values = [fv.value for fv in self.values]
-        instances_map = self.instance_mapper(values)
-        for fv in self.values:
-            fv._instance = instances_map.get(fv.value)
+        if self.mapper_registry and self.instance_mapper in self.mapper_registry:
+            facets = self.mapper_registry[self.instance_mapper]
+        else:
+            facets = [self]
+        values = list(chain(*(f.values for f in facets)))
+        if self.instance_mapper:
+            instances = self.instance_mapper([v.value for v in values])
+        else:
+            instances = {}
+        for fv in values:
+            fv._instance = instances.get(fv.value)
 
 
 class FacetValue(object):
     def __init__(self, value, count, facet=None):
-        self.value = value
+        self.value = self.orig_value = value
+        if facet:
+            self.value = facet.to_python(self.orig_value)
         self.count = count
         self.facet = facet
         self.pivot = None
@@ -165,91 +180,60 @@ class FacetQuery(object):
         self.count = raw_facet_queries[self.key]
 
 
-class FacetPivot(object):
+class FacetPivot(FacetField):
     def __init__(self, *fields, **kwargs):
-        self.fields = []
-        self.instance_mappers = {}
-        self.types = {}
-        self.to_pythons = {}
-        self.facet_params = {}
-        for field in fields:
-            kw = {}
-            if isinstance(field, (list, tuple)):
-                if len(field) == 1:
-                    field = field[0]
-                elif len(field) == 2:
-                    field, kw = field
-            self.instance_mappers[field] = _pop_from_kwargs(kw, 'instance_mapper')
-            self.types[field] = instantiate(_pop_from_kwargs(kw, 'type'))
-            self.to_pythons[field] = get_to_python(self.types[field])
-            self.facet_params[field] = kw
-            self.fields.append(field)
-        self.field = self.fields[0]
-        self.name = ','.join(self.fields)
-        self.local_params = LocalParams(
-            _pop_from_kwargs(kwargs, 'local_params'))
-        self.key = self.local_params.get('key', self.name)
-        self.values = []
+        self.fields = fields
+        self.kwargs = kwargs
 
-    def clone(self):
-        fields_data = []
-        for field in self.fields:
-            fields_data.append((field, dict(_instance_mapper=self.instance_mappers[field],
-                                            _type=self.types[field],
-                                            **self.facet_params[field])))
-        return self.__class__(
-            *fields_data,
-            **dict(local_params=self.local_params)
-        )
+        field, facet_params = self._get_field_and_params(fields[0])
+        facet_params.update(kwargs)
+        super(FacetPivot, self).__init__(field, **facet_params)
+
+        self.facets = [self]
+        for facet_data in fields[1:]:
+            field, facet_params = self._get_field_and_params(facet_data)
+            self.facets.append(FacetField(field, **facet_params))
+
+        self.field_names = [f.field for f in self.facets]
+        self.name = ','.join(self.field_names)
+        self.key = self.local_params.get('key', self.name)
+
+    def _get_field_and_params(self, facet_data):
+        if not isinstance(facet_data, (list, tuple)):
+            facet_data = (facet_data,)
+        if len(facet_data) >= 2:
+            return facet_data[0], facet_data[1]
+        return facet_data[0], {}
         
+    def clone(self):
+        return self.__class__(*self.fields, **self.kwargs)
+
     def get_params(self):
         params = {}
         params['facet'] = True
         params['facet.pivot'] = [make_fq(X(self.name), self.local_params)]
-        for field, facet_params in self.facet_params.items():
-            for p, v in facet_params.items():
-                params['f.{}.facet.{}'.format(field, p)] = v
+        for facet in self.facets:
+            for p, v in facet.facet_params.items():
+                params['f.{}.facet.{}'.format(facet.field, p)] = v
         return params
 
-    def get_value(self, value):
-        for fv in self.values:
-            if fv.value == value:
-                return fv
-    
     def process_data(self, results):
-        self.values = []
-        raw_pivot = results.raw_results.facets.get('facet_pivot', {}).get(self.key, {})
-        self.process_pivot(raw_pivot, self)
+        raw_data = results.raw_results.facets.get('facet_pivot', {}).get(self.key, {})
+        self.process_facet(raw_data, self.facets)
 
-    def process_pivot(self, raw_pivot, root_pivot):
-        self.root_pivot = root_pivot
-        for facet_data in raw_pivot:
-            to_python = root_pivot.to_pythons[self.fields[0]]
+    def process_facet(self, raw_data, facets):
+        if not facets:
+            return
+
+        facet = facets[0]
+        next_facet = facets[1] if len(facets) >= 2 else None
+        rest_facets = facets[2:]
+        for facet_data in raw_data:
             fv = FacetValue(
-                to_python(facet_data['value']), facet_data['count'], facet=self)
-            if 'pivot' in facet_data:
-                fv.pivot = FacetPivot(*self.fields[1:])
-                fv.pivot.process_pivot(facet_data['pivot'], root_pivot)
-            self.values.append(fv)
-        
-    def _populate_instances(self, field=None):
-        if field is None:
-            return self.root_pivot._populate_instances(field=self.field)
-        
-        facet_values = []
-        pivots = [self]
-        while pivots:
-            next_pivots = []
-            for cur_pivot in pivots:
-                for fv in cur_pivot.values:
-                    if fv.pivot:
-                        next_pivots.append(fv.pivot)
-                    if cur_pivot.field == field:
-                        facet_values.append(fv)
-            pivots = next_pivots
-
-        values = set([fv.value for fv in facet_values])
-        instance_mapper = self.instance_mappers.get(field)
-        instances_map = instance_mapper(values) if instance_mapper else {}
-        for fv in facet_values:
-            fv._instance = instances_map.get(fv.value)
+                facet_data['value'], facet_data['count'], facet=facet,
+            )
+            if 'pivot' in facet_data and next_facet:
+                fv.pivot = next_facet.clone()
+                fv.pivot.set_mapper_registry(self.mapper_registry)
+                self.process_facet(facet_data['pivot'], [fv.pivot] + rest_facets)
+            facet.values.append(fv)

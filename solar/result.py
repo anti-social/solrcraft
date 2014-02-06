@@ -4,24 +4,25 @@ from .util import LocalParams, X, make_fq
 from .compat import force_unicode
 
 
-def clone_all(values):
-    return [v.clone() for v in values]
-
-
 class SolrResults(object):
-    def __init__(self, query, raw_results):
-        self.query = query
-        self.searcher = self.query.searcher
+    def __init__(self, raw_results, query, document_cls, instance_mapper, db_query,
+                 facet_fields, facet_queries, facet_dates, facet_ranges,
+                 facet_pivots, stats_fields, groupeds):
         self.raw_results = raw_results
         self.ndocs = self.hits = self.raw_results.hits
         self.docs = []
-        self.facet_fields = clone_all(self.query._facet_fields)
-        self.facet_queries = clone_all(self.query._facet_queries)
-        self.facet_dates = clone_all(self.query._facet_dates)
-        self.facet_ranges = clone_all(self.query._facet_ranges)
-        self.facet_pivots = clone_all(self.query._facet_pivots)
-        self.stats_fields = clone_all(self.query._stats_fields)
-        self.groupeds = clone_all(self.query._groupeds)
+        self.query = query
+        self.searcher = query.searcher
+        self.document_cls = document_cls
+        self.instance_mapper = instance_mapper
+        self.db_query = db_query
+        self.facet_fields = facet_fields
+        self.facet_queries = facet_queries
+        self.facet_dates = facet_dates
+        self.facet_ranges = facet_ranges
+        self.facet_pivots = facet_pivots
+        self.stats_fields = stats_fields
+        self.groupeds = groupeds
 
         for facet in chain(self.facet_fields, self.facet_queries,
                            self.facet_dates, self.facet_ranges,
@@ -35,7 +36,7 @@ class SolrResults(object):
             stats.process_data(self)
         
         for raw_doc in self.raw_results.docs:
-            doc = self.searcher.document_cls(_results=self, **raw_doc)
+            doc = self.document_cls(_results=self, **raw_doc)
             self.docs.append(doc)
 
         self.highlighted = self.raw_results.highlighting
@@ -89,6 +90,9 @@ class SolrResults(object):
                 return facet
 
     def _populate_instances(self):
+        if not self.instance_mapper:
+            return
+
         all_docs = []
         for doc in self.docs:
             all_docs.append(doc)
@@ -100,12 +104,7 @@ class SolrResults(object):
                 all_docs.append(doc)
 
         ids = [doc.id for doc in all_docs]
-        if self.query._instance_mapper:
-            instances = self.query._instance_mapper(
-                ids, db_query=self.query._db_query)
-        else:
-            instances = self.searcher.instance_mapper(
-                ids, db_query=self.query._db_query)
+        instances = self.instance_mapper(ids, db_query=self.db_query)
 
         for doc in all_docs:
             doc._instance = instances.get(doc.id)

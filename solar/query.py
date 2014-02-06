@@ -31,6 +31,10 @@ def _with_clone(fn):
     return wrapper
 
 
+def clone_all(values):
+    return [v.clone() for v in values]
+
+
 class SolrParameterSetter(object):
     def __init__(self, solr_query, param_name):
         self.solr_query = solr_query
@@ -64,7 +68,8 @@ class SolrQuery(object):
         self._stats_fields = []
         self._params = {}
 
-        self._instance_mapper = None
+        self._document_cls = self.searcher.document_cls
+        self._instance_mapper = self.searcher.instance_mapper
         self._db_query = None
 
         self._iter_instances = False
@@ -190,7 +195,23 @@ class SolrQuery(object):
     def _do_search(self, only_count=False):
         params = self._prepare_params(only_count=only_count)
         raw_results = self.searcher.select(self._make_q(), **params)
-        return SolrResults(self, raw_results)
+
+        facet_fields = clone_all(self._facet_fields)
+        facet_queries = clone_all(self._facet_queries)
+        facet_dates = clone_all(self._facet_dates)
+        facet_ranges = clone_all(self._facet_ranges)
+        facet_pivots = clone_all(self._facet_pivots)
+        stats_fields = clone_all(self._stats_fields)
+        groupeds = clone_all(self._groupeds)
+
+        mapper_registry = {}
+        for facet in chain(facet_fields, facet_pivots):
+            facet.set_mapper_registry(mapper_registry)
+
+        return SolrResults(raw_results, self, self._document_cls,
+                           self._instance_mapper, self._db_query,
+                           facet_fields, facet_queries, facet_dates, facet_ranges,
+                           facet_pivots, stats_fields, groupeds)
             
     def _clone(self, cls=None):
         cls = cls or self.__class__
@@ -205,6 +226,7 @@ class SolrQuery(object):
         clone._facet_pivots = list(self._facet_pivots)
         clone._stats_fields = list(self._stats_fields)
         clone._params = self._params.copy()
+        clone._document_cls = self._document_cls
         clone._instance_mapper = self._instance_mapper
         clone._db_query = self._db_query
         clone._iter_instances = self._iter_instances
@@ -372,12 +394,14 @@ class SolrQuery(object):
         local_params = kwargs.pop('_local_params', local_params)
         instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
         type = kwargs.pop('_type', type)
-        self._facet_fields.append(
-            FacetField(field, local_params=local_params,
-                       instance_mapper=instance_mapper, type=type,
-                       limit=limit, offset=offset, mincount=mincount,
-                       sort=sort, prefix=prefix, missing=missing, method=method,
-                       **kwargs))
+        facet = FacetField(
+            field, local_params=local_params,
+            instance_mapper=instance_mapper, type=type,
+            limit=limit, offset=offset, mincount=mincount,
+            sort=sort, prefix=prefix, missing=missing, method=method,
+            **kwargs
+        )
+        self._facet_fields.append(facet)
 
     @_with_clone
     def facet_range(self, field, start, end, gap,
@@ -385,22 +409,25 @@ class SolrQuery(object):
                     local_params=None, type=None, **kwargs):
         local_params = kwargs.pop('_local_params', local_params)
         type = kwargs.pop('_type', type)
-        self._facet_ranges.append(
-            FacetRange(field, start, end, gap,
-                       hardend=hardend, other=other, include=include,
-                       local_params=local_params, type=type, **kwargs))
+        facet =FacetRange(
+            field, start, end, gap,
+            hardend=hardend, other=other, include=include,
+            local_params=local_params, type=type,
+            **kwargs
+        )
+        self._facet_ranges.append(facet)
 
     @_with_clone
     def facet_query(self, *args, **kwargs):
         local_params = _pop_from_kwargs(kwargs, 'local_params')
-        self._facet_queries.append(
-            FacetQuery(X(*args, **kwargs), local_params=local_params))
-        
+        facet = FacetQuery(X(*args, **kwargs), local_params=local_params)
+        self._facet_queries.append(facet)
+            
     @_with_clone
     def facet_pivot(self, *fields, **kwargs):
         local_params = _pop_from_kwargs(kwargs, 'local_params')
-        self._facet_pivots.append(
-            FacetPivot(*fields, local_params=local_params))
+        facet = FacetPivot(*fields, local_params=local_params)
+        self._facet_pivots.append(facet)
 
     @_with_clone
     def group(self, *fields, **group_params):
@@ -448,28 +475,36 @@ class SolrQuery(object):
     def group_field(self, field, instance_mapper=None, type=None, **kwargs):
         instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
         type = kwargs.pop('_type', type)
-        self._groupeds.append(
-            GroupedField(
-                field, self.searcher.group_cls, self.searcher.document_cls,
-                instance_mapper=instance_mapper, type=type))
+        grouped = GroupedField(
+            field, self.searcher.group_cls, self.searcher.document_cls,
+            instance_mapper=instance_mapper, type=type,
+            **kwargs
+        )
+        self._groupeds.append(grouped)
 
     @_with_clone
     def group_query(self, *args, **kwargs):
-        self._groupeds.append(
-            GroupedQuery(
-                X(*args, **kwargs), self.searcher.group_cls,
-                self.searcher.document_cls))
+        grouped = GroupedQuery(
+            X(*args, **kwargs),
+            self.searcher.group_cls,
+            self.searcher.document_cls,
+        )
+        self._groupeds.append(grouped)
 
     @_with_clone
     def group_func(self, func):
-        self._groupeds.append(
-            GroupedFunc(
-                func, self.searcher.group_cls, self.searcher.document_cls))
+        grouped = GroupedFunc(
+            func,
+            self.searcher.group_cls,
+            self.searcher.document_cls,
+        )
+        self._groupeds.append(grouped)
 
     @_with_clone
     def stats(self, field, facet_fields=None):
         self._stats_fields.append(
-            Stats(field, facet_fields=facet_fields))
+            Stats(field, facet_fields=facet_fields)
+        )
         self._params['stats'] = True
 
     @_with_clone

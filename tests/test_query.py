@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 from datetime import datetime
 from collections import namedtuple
 
-from mock import patch
+from mock import patch, Mock
 
 from solar.searcher import SolrSearcher
 from solar.util import SafeUnicode, X, LocalParams, make_fq
@@ -16,8 +16,9 @@ from .base import TestCase
 
 Obj = namedtuple('Obj', ['id', 'name'])
 
+
 def _obj_mapper(ids):
-    return dict((id, Obj(int(id), '{0} {0}'.format(id))) for id in ids)
+    return {id: Obj(id, '{0} {0}'.format(id)) for id in ids}
 
 
 class QueryTest(TestCase):
@@ -396,12 +397,14 @@ class QueryTest(TestCase):
   }
 }
 '''
+            obj_mapper = Mock(wraps=_obj_mapper)
+            
             q = self.searcher.search()
             q = q.filter(category=3540208, _local_params={'tag': 'cat'})
             q = q.facet(limit=5)
-            q = q.facet_field('category', _instance_mapper=_obj_mapper,
+            q = q.facet_field('category', _instance_mapper=obj_mapper,
                               _local_params={'key': 'cat'}, _type=Integer)
-            q = q.facet_field('category', _instance_mapper=_obj_mapper,
+            q = q.facet_field('category', _instance_mapper=obj_mapper,
                               _local_params={'ex': 'cat', 'key': 'cat_ex'})
 
             raw_query = str(q)
@@ -426,10 +429,12 @@ class QueryTest(TestCase):
             self.assertEqual(len(cat_ex_facet.values), 5)
             self.assertEqual(cat_ex_facet.values[0].value, '29')
             self.assertEqual(cat_ex_facet.values[0].count, 147163)
-            self.assertEqual(cat_ex_facet.values[0].instance, (29, '29 29'))
+            self.assertEqual(cat_ex_facet.values[0].instance, ('29', '29 29'))
             self.assertEqual(cat_ex_facet.values[3].value, '3540208')
             self.assertEqual(cat_ex_facet.values[3].count, 19083)
-            self.assertEqual(cat_ex_facet.values[3].instance, (3540208, '3540208 3540208'))
+            self.assertEqual(cat_ex_facet.values[3].instance, ('3540208', '3540208 3540208'))
+
+            self.assertEqual(obj_mapper.call_count, 1)
             
     def test_facet_range(self):
         with self.patch_send_request() as send_request:
@@ -754,13 +759,15 @@ class QueryTest(TestCase):
   }
 }
 '''
+            obj_mapper = Mock(wraps=_obj_mapper)
 
             q = self.searcher.search()
             q = q.facet_pivot(
-                'type',
-                ('category', dict(_instance_mapper=_obj_mapper, _type=Integer, limit=3)),
+                ('type', dict(_instance_mapper=obj_mapper)),
+                ('category', dict(_instance_mapper=obj_mapper, _type=Integer, limit=3)),
                 'visible',
-                _local_params=LocalParams(ex='type,category', key='tcv'))
+                _local_params=LocalParams(ex='type,category', key='tcv'),
+            )
 
             raw_query = str(q)
 
@@ -770,9 +777,10 @@ class QueryTest(TestCase):
 
             r = q.results
             facet = r.get_facet_pivot('tcv')
-            self.assertListEqual(facet.fields, ['type', 'category', 'visible'])
+            self.assertListEqual(facet.field_names, ['type', 'category', 'visible'])
             self.assertEqual(facet.field, 'type')
             self.assertEqual(facet.values[0].value, 'B')
+            self.assertEqual(facet.values[0].instance, ('B', 'B B'))
             self.assertEqual(facet.values[0].count, 88203)
             self.assertEqual(facet.values[0].pivot.field, 'category')
             self.assertEqual(facet.values[0].pivot.values[0].value, 14210102)
@@ -794,6 +802,8 @@ class QueryTest(TestCase):
             self.assertEqual(facet.values[2].value, 'S')
             self.assertEqual(facet.values[2].count, 3)
             self.assertRaises(IndexError, lambda: facet.values[3])
+
+            self.assertEqual(obj_mapper.call_count, 1)
 
     def test_group_query(self):
         with self.patch_send_request() as send_request:
@@ -1137,6 +1147,7 @@ class QueryTest(TestCase):
 
             q = searcher.search()
             q = q.facet_field('category', mincount=5, limit=10,
+                              type=Integer,
                               _local_params={'ex': 'category'},
                               _instance_mapper=_obj_mapper)
             q = q.facet_field('tag', _local_params={'ex': 'tag'})
@@ -1195,10 +1206,10 @@ class QueryTest(TestCase):
 
             category_facet = r.get_facet_field('category')
             self.assertEqual(len(category_facet.values), 2)
-            self.assertEqual(category_facet.values[0].value, '1')
+            self.assertEqual(category_facet.values[0].value, 1)
             self.assertEqual(category_facet.values[0].count, 5)
             self.assertEqual(category_facet.values[0].instance, (1, '1 1'))
-            self.assertEqual(category_facet.values[1].value, '2')
+            self.assertEqual(category_facet.values[1].value, 2)
             self.assertEqual(category_facet.values[1].count, 2)
             self.assertEqual(category_facet.values[1].instance, (2, '2 2'))
 
@@ -1341,7 +1352,8 @@ class QueryTest(TestCase):
 
             q = (
                 self.searcher.search()
-                .stats('price', facet_fields=['visible', ('category', _obj_mapper)]))
+                .stats('price', facet_fields=['visible', ('category', _obj_mapper)])
+            )
 
             raw_query = str(q)
 
@@ -1373,7 +1385,7 @@ class QueryTest(TestCase):
             self.assertEqual(len(category_facet.values), 3)
             self.assertEqual(category_facet.get_value('11').count, 1)
             self.assertEqual(category_facet.get_value('11').missing, 0)
-            self.assertEqual(category_facet.get_value('11').instance.id, 11)
+            self.assertEqual(category_facet.get_value('11').instance.id, '11')
             self.assertEqual(category_facet.get_value('11').instance.name, '11 11')
             self.assertEqual(category_facet.get_value('21').count, 13)
             self.assertEqual(category_facet.get_value('21').missing, 5)
@@ -1383,7 +1395,7 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(category_facet.get_value('21').sum_of_squares, 84656302.06075683)
             self.assertAlmostEqual(category_facet.get_value('21').mean, 2153.707693246695)
             self.assertAlmostEqual(category_facet.get_value('21').stddev, 1424.674328206475)
-            self.assertEqual(category_facet.get_value('21').instance.id, 21)
+            self.assertEqual(category_facet.get_value('21').instance.id, '21')
             self.assertEqual(category_facet.get_value('21').instance.name, '21 21')
             self.assertEqual(category_facet.get_value('66').count, 0)
             self.assertEqual(category_facet.get_value('66').missing, 1)
@@ -1393,7 +1405,7 @@ class QueryTest(TestCase):
             self.assertAlmostEqual(category_facet.get_value('66').sum_of_squares, 0.)
             self.assertEqual(str(category_facet.get_value('66').mean), 'nan')
             self.assertAlmostEqual(category_facet.get_value('66').stddev, 0.)
-            self.assertEqual(category_facet.get_value('66').instance.id, 66)
+            self.assertEqual(category_facet.get_value('66').instance.id, '66')
             self.assertEqual(category_facet.get_value('66').instance.name, '66 66')
 
         # empty stats

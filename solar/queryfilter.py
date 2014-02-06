@@ -321,7 +321,9 @@ class FacetFilterValueMixin(object):
     def title(self):
         if self._title:
             return self._title
-        elif self.instance:
+        if self.filter.get_title:
+            return self.filter.get_title(self)
+        if self.instance:
             return force_unicode(self.instance)
         return force_unicode(self.value)
 
@@ -346,15 +348,16 @@ class FacetFilterValueMixin(object):
         return self.facet_value.count
     
     @property
-    def count_plus(self):
+    def count_text(self):
         if not self.count:
             return ''
         if not self.selected \
            and self.filter.select_multiple \
            and self.filter.selected_values \
            and self.filter.fq_connector == X.OR:
-            return '+{}'.format(self.facet_value.count)
-        return '{}'.format(self.facet_value.count)
+            return '+{}'.format(self.count)
+        return '{}'.format(self.count)
+    count_plus = count_text
 
     @property
     def instance(self):
@@ -373,26 +376,24 @@ class FacetFilterValue(FacetFilterValueMixin):
 class FacetFilter(Filter):
     filter_value_cls = FacetFilterValue
     available_operators = ('exact',)
+    instance_mapper = None
+    get_title = None
     
     def __init__(self, name, field=None, filter_value_cls=None, type=None,
-                 local_params=None, instance_mapper=None,
+                 local_params=None, instance_mapper=None, get_title=None,
                  select_multiple=True, ensure_selected_values=False, **kwargs):
         super(FacetFilter, self).__init__(name, field, type=type,
                                           select_multiple=select_multiple, **kwargs)
         self.filter_value_cls = filter_value_cls or self.filter_value_cls
-        self.local_params = LocalParams(
-            kwargs.pop('_local_params', local_params))
-        self._instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
+        self.local_params = LocalParams(kwargs.pop('_local_params', local_params))
+        instance_mapper = kwargs.pop('_instance_mapper', instance_mapper)
+        self.instance_mapper = instance_mapper or self.instance_mapper
+        self.get_title = get_title or self.get_title
         self.ensure_selected_values = ensure_selected_values
         self.kwargs = kwargs
         self.values = []
         self.selected_values = []
         self.all_values = []
-
-    def instance_mapper(self, ids):
-        if self._instance_mapper:
-            return self._instance_mapper(ids)
-        return {}
 
     def add_value(self, fv):
         self.all_values.append(fv)
@@ -452,68 +453,39 @@ class FacetPivotFilterValueMixin(object):
 
 
 class FacetPivotFilterValue(FacetFilterValueMixin, FacetPivotFilterValueMixin):
-    def __init__(self, filter, facet_values, selected, title=None,
-                 **kwargs):
+    def __init__(self, filter, facet_value, selected, title=None, path_values=None, **kwargs):
         self.filter = weakref.proxy(filter)
-        self.facet_values = facet_values
-        self.facet_value = facet_values[-1]
+        self.facet_value = facet_value
         self.selected = selected
         self._title = title
+        self.path_values = path_values or ()
         self.opts = kwargs
         self.pivot = None
 
     @property
     def filter_name(self):
-        return self.filter._pivot_filter.name
+        return self.filter.root_pivot.name
 
     @property
     def filter_value(self):
-        values = [fv.value for fv in self.facet_values]
-        return self.filter._pivot_filter._qf.codec.encode_value(values)
+        return self.filter.root_pivot._qf.codec.encode_value(self.path_values)
 
 
 class FacetPivotFilter(FacetFilter):
     filter_value_cls = FacetPivotFilterValue
+    
+    def __init__(self, *args, **kwargs):
+        super(FacetPivotFilter, self).__init__(*args, **kwargs)
+        self.root_pivot = None
 
-    def __init__(self, name, field=None, filter_value_cls=None,
-                 type=None, _pivot_filter=None, ensure_selected_values=False,
-                 **kwargs):
-        super(FacetPivotFilter, self).__init__(
-            name, field=field, filter_value_cls=filter_value_cls,
-            type=type, ensure_selected_values=ensure_selected_values, **kwargs)
-        self._pivot_filter = _pivot_filter
-
-    def bind(self, pivot_filter):
-        return FacetPivotFilter(
+    def clone(self):
+        return self.__class__(
             self.name, field=self.field, filter_value_cls=self.filter_value_cls,
             type=self.type, ensure_selected_values=self.ensure_selected_values,
-            _pivot_filter=pivot_filter, **self.kwargs)
+            instance_mapper=self.instance_mapper, get_title=self.get_title,
+            **self.kwargs
+        )
 
-    def process_facet(self, facet, pivot_filters, selected_values, facet_values):
-        param_values = [v[0] for v in selected_values]
-        processed_facet_values = set()
-        for fv in facet.values:
-            selected = fv.value in param_values
-            filter_value = self.filter_value_cls(
-                self, facet_values + [fv], selected)
-            self.add_value(filter_value)
-            processed_facet_values.add(fv.value)
-            if fv.pivot:
-                pivot_filter = pivot_filters[0].bind(self._pivot_filter)
-                pivot_filter.process_facet(
-                    fv.pivot,
-                    pivot_filters[1:],
-                    [v[1:] for v in selected_values if len(v) > 1 and fv.value == v[0]],
-                    facet_values + [fv])
-                filter_value.pivot = pivot_filter
-        if self.ensure_selected_values:
-            for v in param_values:
-                if v not in processed_facet_values:
-                    fv = FacetValue(v, None, facet)
-                    facet.values.append(fv)
-                    filter_value = self.filter_value_cls(self, facet_values + [fv], True)
-                    self.add_value(filter_value)
-                
 
 class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
     allowed_operators = ('exact',)
@@ -527,12 +499,13 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         for p in self._pivots:
             kw = p.kwargs.copy()
             kw.update(
-                _instance_mapper=p._instance_mapper,
+                _instance_mapper=p.instance_mapper,
                 _type=p.type,
             )
             self._pivot_kwargs.append(kw)
         self.local_params = LocalParams(_pop_from_kwargs(kwargs, 'local_params'))
-        self.pivot = self._pivots[0].bind(self)
+        self.pivot = self._pivots[0]
+        self.pivot.root_pivot = self
 
     def get_types(self):
         return [p.type for p in self._pivots]
@@ -565,12 +538,49 @@ class PivotFilter(BaseFilter, FacetPivotFilterValueMixin):
         for op, vals in params:
             if op in self.allowed_operators:
                 selected_values.append(vals)
-        self.pivot.process_facet(
-            results.get_facet_pivot(self.name),
-            self._pivots[1:],
+        facet = results.get_facet_pivot(self.name)
+        self.process_facet(
+            facet,
+            self._pivots,
             selected_values,
-            [])
+        )
 
+    def process_facet(self, facet, filters, selected_values, parent_values=None):
+        filter = filters[0]
+        next_filter = filters[1] if len(filters) >= 2 else None
+        rest_filters = filters[2:]
+        current_selected_values = [v[0] for v in selected_values if v]
+        processed_facet_values = set()
+        parent_values = parent_values or ()
+        for fv in facet.values:
+            path_values = parent_values + (fv.value,)
+            selected = fv.value in current_selected_values
+            filter_value = filter.filter_value_cls(filter, fv, selected,
+                                                   path_values=path_values)
+            filter.add_value(filter_value)
+            processed_facet_values.add(fv.value)
+            if fv.pivot and next_filter:
+                filter_value.pivot = next_filter.clone()
+                filter_value.pivot.root_pivot = self
+                next_selected_values = [v[1:] for v in selected_values
+                                        if len(v) >= 2 and fv.value == v[0]]
+                self.process_facet(
+                    fv.pivot,
+                    (filter_value.pivot,) + rest_filters,
+                    next_selected_values,
+                    path_values,
+                )
+
+        if filter.ensure_selected_values:
+            for v in current_selected_values:
+                if v not in processed_facet_values:
+                    fv = FacetValue(v, None, facet)
+                    facet.values.append(fv)
+                    path_values = parent_values + (fv.value,)
+                    filter_value = filter.filter_value_cls(filter, fv, True,
+                                                           path_values=path_values)
+                    filter.add_value(filter_value)
+                
                 
 class FacetQueryFilterValue(object):
     def __init__(self, name, fq, local_params=None, title=None, **kwargs):
@@ -598,6 +608,13 @@ class FacetQueryFilterValue(object):
     @property
     def count(self):
         return self.facet_query.count
+
+    @property
+    def count_text(self):
+        if not self.count:
+            return ''
+        return '{}'.format(self.count)
+    count_plus = count_text
 
 
 class FacetQueryFilter(Filter):
