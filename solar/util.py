@@ -231,7 +231,7 @@ def process_value(v, safe=False):
     if isinstance(v, (Function, FunctionList)):
         return force_unicode(v)
     if isinstance(v, (datetime, date)):
-        return v.strftime('%Y-%m-%dT%H:%M:%SZ')
+        return v.strftime('%Y-%m-%dT%H\\:%M\\:%SZ')
     if isinstance(v, string_types) and SOLR_DATETIME_RE.match(v):
         return v
     if safe:

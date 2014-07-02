@@ -198,7 +198,7 @@ class QueryTest(TestCase):
             ["with_photo:true"])
         self.assertSequenceEqual(
             q.filter(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))._prepare_params()['fq'],
-            ["date_created:{2012-05-17T14:35:41Z TO *}"])
+            ["date_created:{2012-05-17T14\\:35\\:41Z TO *}"])
         self.assertSequenceEqual(
             q.filter(price__lt=1000)._prepare_params()['fq'],
             ["price:{* TO 1000}"])

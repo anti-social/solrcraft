@@ -58,8 +58,10 @@ class UtilTest(TestCase):
                          'name:(Chuck Nor*)')
         self.assertEqual(make_fq(X(with_photo=True)),
                          "with_photo:true")
+        self.assertEqual(make_fq(X(birthday=datetime(2014, 7, 2, 0, 0, 0))),
+                         "birthday:2014-07-02T00\\:00\\:00Z")
         self.assertEqual(make_fq(X(date_created__gt=datetime(2012, 5, 17, 14, 35, 41, 794880))),
-                         "date_created:{2012-05-17T14:35:41Z TO *}")
+                         "date_created:{2012-05-17T14\\:35\\:41Z TO *}")
         self.assertEqual(make_fq(X(price__lt=1000)),
                          "price:{* TO 1000}")
         self.assertEqual(make_fq(X(price__gte=100) & X(price__lte=1000)),
