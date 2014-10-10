@@ -23,6 +23,21 @@ def _obj_mapper(ids):
 
 class QueryTest(TestCase):
     def test_query_params(self):
+        q = SolrSearcher().search()
+
+        self.assertNotIn('fl=', str(q))
+        self.assertIn('fl=id', str(q.fields('id')))
+        self.assertIn('fl=id,score', str(q.fields('id', 'score')))
+        self.assertNotIn('fl=', str(q.add_fields('id')))
+        self.assertIn(
+            'fl=id,score,status,popularity',
+            str(q.fields('id', 'score').add_fields('status', 'popularity'))
+        )
+        self.assertIn(
+            'fl=id',
+            str(q.fields('id', 'score').add_fields('status').fields(None).fields('id'))
+        )
+
         q = SolrSearcher().search().dismax()
         raw_query = str(q)
 

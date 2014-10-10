@@ -175,8 +175,6 @@ class SolrQuery(object):
             params['qf'] = ' '.join(
                 starmap('{}^{}'.format,
                         filter(lambda fw: fw[1], params['qf'])))
-        if 'fl' not in params:
-            params['fl'] = ('*', 'score')
 
         for grouped in self._groupeds:
             params = merge_params(params, grouped.get_params())
@@ -271,7 +269,7 @@ class SolrQuery(object):
     @_with_clone
     def instances(self):
         self._iter_instances = True
-        self._params['fl'] = [self.searcher.unique_field]
+        self._params['fl'] = (self.searcher.unique_field,)
 
     @_with_clone
     def filter(self, *args, **kwargs):
@@ -291,8 +289,23 @@ class SolrQuery(object):
     def with_db_query(self, db_query):
         self._db_query = db_query
 
-    def only(self, *fields):
-        return self.fl(fields)
+    @_with_clone
+    def fields(self, *fields):
+        if len(fields) == 1 and fields[0] is None:
+            del self._params['fl']
+            return
+        self._params['fl'] = fields
+
+    fl = fields
+    only = fields
+
+    @_with_clone
+    def add_fields(self, *fields):
+        if 'fl' not in self._params:
+            return
+        for field in fields:
+            if field not in self._params['fl']:
+                self._params['fl'] = self._params['fl'] + (field,)
 
     def dismax(self):
         return self.defType('dismax')
