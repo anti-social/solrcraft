@@ -85,6 +85,21 @@ class QueryTest(TestCase):
         self.assertIn('bf=linear(rank,1,0)^100 recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)', raw_query)
         self.assertIn('defType=dismax', raw_query)
 
+
+        q = (
+            SolrSearcher().search()
+            .bf(func.linear('rank', 1, 0) * 100)
+            .bf(func.product('rank', 'popularity'))
+        )
+        raw_query = str(q)
+        self.assertIn('bf=linear(rank,1,0)^100', raw_query)
+        self.assertIn('bf=product(rank,popularity)', raw_query)
+        q = q.bf(None, func.recip(func.ms('NOW/HOUR', 'dt_created'), 3.16e-11, 1, 1))
+        raw_query = str(q)
+        self.assertIn('bf=recip(ms(NOW/HOUR,dt_created),3.16e-11,1,1)', raw_query)
+        self.assertNotIn('bf=linear(rank,1,0)^100', raw_query)
+        self.assertNotIn('bf=product(rank,popularity)', raw_query)
+        
         q = (
             SolrSearcher()
             .search(LocalParams('dismax', bf=func.linear('rank', 100, 0),

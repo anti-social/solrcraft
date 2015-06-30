@@ -14,7 +14,7 @@ from .stats import Stats
 from .facets import FacetField, FacetRange, FacetQuery, FacetPivot
 from .grouped import GroupedField, GroupedQuery, GroupedFunc
 from .util import SafeUnicode, safe_solr_input, X, LocalParams, make_fq, make_q
-from .util import _pop_from_kwargs
+from .util import _pop_from_kwargs, wrap_list
 
 
 log = logging.getLogger(__name__)
@@ -42,10 +42,13 @@ class SolrParameterSetter(object):
 
     def __call__(self, *args):
         solr_query = self.solr_query._clone()
-        if len(args) == 1:
-            solr_query._params[self.param_name] = args[0]
-        else:
-            solr_query._params[self.param_name] = list(args)
+        if args and args[0] is None:
+            solr_query._params.pop(self.param_name, None)
+            args = args[1:]
+
+        solr_query._params[self.param_name] = wrap_list(
+            solr_query._params.get(self.param_name, []) + list(args)
+        )
         return solr_query
 
 
