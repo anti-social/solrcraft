@@ -69,6 +69,10 @@ class SimpleCodecTest(TestCase):
                 'price': [('gte', [100.1]), ('lte', [200])],
             }
         )
+        self.assertEqual(
+            codec.decode({'price__lte': '123a:bc'}, {'price': [Float]}),
+            {}
+        )
         self.assertRaises(TypeError, lambda: codec.decode(''))
 
 

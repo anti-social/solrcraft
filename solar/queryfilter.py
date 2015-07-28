@@ -136,7 +136,7 @@ class SimpleCodec(BaseCodec):
                 else:
                     decoded_values.append(to_python(v))
             except ValueError:
-                pass
+                break
         return decoded_values
         
     
